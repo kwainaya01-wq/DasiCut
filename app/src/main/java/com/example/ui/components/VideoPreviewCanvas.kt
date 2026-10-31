@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import android.media.MediaPlayer
+import android.net.Uri
+import android.widget.VideoView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -20,11 +23,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.model.*
 import com.example.ui.theme.*
 import kotlin.random.Random
@@ -176,13 +181,74 @@ fun VideoPreviewCanvas(
           .border(1.dp, CharcoalBorder, RoundedCornerShape(6.dp))
           .background(Color.Black)
       ) {
-        // Main Video Frame Canvas with filters & effects
-        Canvas(modifier = Modifier.fillMaxSize()) {
-          drawVideoFrame(
-            clip = activeClip,
-            clipProgressMs = clipProgressMs,
-            animPhase = animPhase
+        // --- REAL NATIVE VIDEO PLAYER VIEW ---
+        val videoUriString = activeClip?.uri
+        if (!videoUriString.isNullOrEmpty()) {
+          var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+          var isPrepared by remember { mutableStateOf(false) }
+
+          AndroidView(
+            factory = { ctx ->
+              VideoView(ctx).apply {
+                setOnPreparedListener { mp ->
+                  mediaPlayerRef = mp
+                  isPrepared = true
+                  mp.setVolume(1.0f, 1.0f) // Audio Full
+                  if (isPlaying) {
+                    start()
+                  }
+                }
+                setOnErrorListener { _, _, _ ->
+                  true // Prevent error popups
+                }
+              }
+            },
+            update = { videoView ->
+              val targetUri = Uri.parse(videoUriString)
+              // Only reset URI if it changed
+              if (videoView.tag != videoUriString) {
+                videoView.tag = videoUriString
+                isPrepared = false
+                videoView.setVideoURI(targetUri)
+              }
+
+              // Play / Pause and Seek synchronization
+              if (isPrepared) {
+                val seekTarget = (activeClip?.startOffsetMs ?: 0L) + clipProgressMs
+                val diff = Math.abs(videoView.currentPosition - seekTarget)
+                if (diff > 250) {
+                  videoView.seekTo(seekTarget.toInt())
+                }
+
+                if (isPlaying && !videoView.isPlaying) {
+                  videoView.start()
+                } else if (!isPlaying && videoView.isPlaying) {
+                  videoView.pause()
+                }
+              }
+            },
+            modifier = Modifier.fillMaxSize()
           )
+        } else {
+          // Fallback Canvas if no real video is loaded yet
+          Canvas(modifier = Modifier.fillMaxSize()) {
+            drawVideoFrame(
+              clip = activeClip,
+              clipProgressMs = clipProgressMs,
+              animPhase = animPhase
+            )
+          }
+        }
+
+        // Live Filter / Shaders Overlay on top of real video
+        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.effect != VideoEffect.NONE)) {
+          Canvas(modifier = Modifier.fillMaxSize()) {
+            applyFilterAndEffects(
+              filter = activeClip.filter,
+              effect = activeClip.effect,
+              animPhase = animPhase
+            )
+          }
         }
 
         // Text Overlays
@@ -331,7 +397,7 @@ fun VideoPreviewCanvas(
   }
 }
 
-// Canvas rendering helper for video frame with filters and effects
+// Fallback Canvas rendering helper
 private fun DrawScope.drawVideoFrame(
   clip: VideoClip?,
   clipProgressMs: Long,
@@ -354,11 +420,9 @@ private fun DrawScope.drawVideoFrame(
     EmeraldPrimary
   }
 
-  // Visual simulation of frame animation based on clipProgress
   val progressFraction = (clipProgressMs.toFloat() / clip.effectiveDurationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
   val offsetX = (progressFraction - 0.5f) * size.width * 0.15f
 
-  // Base background gradient representing the clip content
   drawRect(
     brush = Brush.linearGradient(
       colors = listOf(startColor, endColor),
@@ -366,60 +430,20 @@ private fun DrawScope.drawVideoFrame(
       end = Offset(size.width + offsetX, size.height)
     )
   )
+}
 
-  // Decorative scenic elements (sun/moon, waves, silhouette) to make it look like a real video scene!
-  val sunCenter = Offset(size.width * 0.5f + (offsetX * 0.5f), size.height * 0.35f)
-  drawCircle(
-    color = Color(0x66FFFFFF),
-    radius = size.width * 0.18f,
-    center = sunCenter
-  )
-  drawCircle(
-    color = GoldAccent.copy(alpha = 0.8f),
-    radius = size.width * 0.12f,
-    center = sunCenter
-  )
-
-  // Horizontal motion waves/hills in lower third
-  val path = Path().apply {
-    moveTo(0f, size.height * 0.65f)
-    cubicTo(
-      size.width * 0.25f, size.height * 0.55f,
-      size.width * 0.75f, size.height * 0.75f,
-      size.width, size.height * 0.60f
-    )
-    lineTo(size.width, size.height)
-    lineTo(0f, size.height)
-    close()
-  }
-  drawPath(path, color = Color(0x44000000))
-
-  // Foreground silhouette
-  val fgPath = Path().apply {
-    moveTo(0f, size.height * 0.82f)
-    cubicTo(
-      size.width * 0.35f, size.height * 0.75f,
-      size.width * 0.65f, size.height * 0.88f,
-      size.width, size.height * 0.80f
-    )
-    lineTo(size.width, size.height)
-    lineTo(0f, size.height)
-    close()
-  }
-  drawPath(fgPath, color = Color(0x88000000))
-
-  // --- Real Filter Processing ---
-  when (clip.filter) {
-    VideoFilter.ORIGINAL -> { /* No color tint */ }
+// Helper to apply real color filter & VFX overlays over the playing video
+private fun DrawScope.applyFilterAndEffects(
+  filter: VideoFilter,
+  effect: VideoEffect,
+  animPhase: Float
+) {
+  when (filter) {
+    VideoFilter.ORIGINAL -> {}
     VideoFilter.WARM_DESI -> {
-      // Golden Indian warmth
-      drawRect(
-        color = Color(0x33FFB300),
-        blendMode = BlendMode.Color
-      )
+      drawRect(color = Color(0x33FFB300), blendMode = BlendMode.Color)
     }
     VideoFilter.BOLLYWOOD -> {
-      // Teal shadows & orange highlights
       drawRect(
         brush = Brush.verticalGradient(
           colors = listOf(Color(0x33FF6D00), Color(0x440097A7))
@@ -455,11 +479,9 @@ private fun DrawScope.drawVideoFrame(
     }
   }
 
-  // --- Real Effects Processing ---
-  when (clip.effect) {
+  when (effect) {
     VideoEffect.NONE -> {}
     VideoEffect.GLITCH -> {
-      // Render randomized horizontal glitch slices
       val glitchLineY = (animPhase * size.height) % size.height
       drawRect(
         color = Color(0x8800E5FF),
@@ -475,7 +497,6 @@ private fun DrawScope.drawVideoFrame(
       )
     }
     VideoEffect.RGB_SPLIT -> {
-      // Prismatic fringe offset
       drawRect(
         color = Color(0x33FF0000),
         topLeft = Offset(-6f, 0f),
@@ -490,7 +511,6 @@ private fun DrawScope.drawVideoFrame(
       )
     }
     VideoEffect.FILM_GRAIN -> {
-      // Subtle randomized noise points
       val random = Random((animPhase * 100).toInt())
       for (i in 0..40) {
         val rx = random.nextFloat() * size.width
@@ -503,7 +523,6 @@ private fun DrawScope.drawVideoFrame(
       }
     }
     VideoEffect.VHS_SCANLINES -> {
-      // Horizontal tracking raster lines
       var y = 0f
       while (y < size.height) {
         drawLine(
@@ -516,7 +535,6 @@ private fun DrawScope.drawVideoFrame(
       }
     }
     VideoEffect.VIGNETTE -> {
-      // Dramatic dark corner radial gradient
       drawRect(
         brush = Brush.radialGradient(
           colors = listOf(Color.Transparent, Color(0xAA000000)),
@@ -544,14 +562,6 @@ private fun DrawScope.drawVideoFrame(
         blendMode = BlendMode.Overlay
       )
     }
-  }
-
-  // Freeze frame badge indicator
-  if (clip.isFrozen) {
-    drawRect(
-      color = Color(0x2200E5FF),
-      size = size
-    )
   }
 }
 
