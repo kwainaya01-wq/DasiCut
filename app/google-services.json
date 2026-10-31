@@ -1,0 +1,25 @@
+{
+  "project_info": {
+    "project_number": "1234567890",
+    "project_id": "desicut-app",
+    "storage_bucket": "desicut-app.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1234567890:android:abcdef123456",
+        "android_client_info": {
+          "package_name": "dasi.cut"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "fake_api_key_for_build"
+        }
+      ],
+      "services": {}
+    }
+  ],
+  "configuration_version": "1"
+}
