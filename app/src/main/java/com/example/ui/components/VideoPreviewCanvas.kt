@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.model.*
 import com.example.ui.theme.*
+import kotlin.math.abs
 import kotlin.random.Random
 
 @Composable
@@ -49,7 +50,6 @@ fun VideoPreviewCanvas(
 ) {
   var isFullscreen by remember { mutableStateOf(false) }
 
-  // Find currently active clip and offset within clip
   var clipStartMs = 0L
   var activeClip: VideoClip? = null
   var clipProgressMs = 0L
@@ -69,17 +69,14 @@ fun VideoPreviewCanvas(
     clipProgressMs = activeClip.effectiveDurationMs
   }
 
-  // Active text overlays at current playhead
   val activeTexts = project.textOverlays.filter {
     playheadMs in it.startAtMs until (it.startAtMs + it.durationMs)
   }
 
-  // Active stickers at current playhead
   val activeStickers = project.stickers.filter {
     playheadMs in it.startAtMs until (it.startAtMs + it.durationMs)
   }
 
-  // Pulse animation for live effect simulations (glitch, grain, scanlines)
   val infiniteTransition = rememberInfiniteTransition(label = "previewAnim")
   val animPhase by infiniteTransition.animateFloat(
     initialValue = 0f,
@@ -97,7 +94,6 @@ fun VideoPreviewCanvas(
       .background(CharcoalBackground),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    // Aspect Ratio & Quality Indicator Bar
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -106,7 +102,6 @@ fun VideoPreviewCanvas(
       verticalAlignment = Alignment.CenterVertically
     ) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        // Aspect ratio chip
         Surface(
           shape = RoundedCornerShape(12.dp),
           color = CharcoalCard,
@@ -125,7 +120,6 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Preview Quality chip
         Surface(
           shape = RoundedCornerShape(12.dp),
           color = CharcoalCard,
@@ -149,7 +143,6 @@ fun VideoPreviewCanvas(
         }
       }
 
-      // Timecode
       Surface(
         shape = RoundedCornerShape(12.dp),
         color = CharcoalSurfaceVariant,
@@ -164,7 +157,6 @@ fun VideoPreviewCanvas(
       }
     }
 
-    // Video Frame Box with constrained aspect ratio
     Box(
       modifier = Modifier
         .fillMaxWidth()
@@ -172,7 +164,6 @@ fun VideoPreviewCanvas(
         .background(Color.Black),
       contentAlignment = Alignment.Center
     ) {
-      // Inner aspect-ratio box
       Box(
         modifier = Modifier
           .fillMaxHeight()
@@ -181,7 +172,6 @@ fun VideoPreviewCanvas(
           .border(1.dp, CharcoalBorder, RoundedCornerShape(6.dp))
           .background(Color.Black)
       ) {
-        // --- REAL NATIVE VIDEO PLAYER VIEW ---
         val videoUriString = activeClip?.uri
         if (!videoUriString.isNullOrEmpty()) {
           var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -193,31 +183,27 @@ fun VideoPreviewCanvas(
                 setOnPreparedListener { mp ->
                   mediaPlayerRef = mp
                   isPrepared = true
-                  mp.setVolume(1.0f, 1.0f) // Audio Full
+                  mp.setVolume(1.0f, 1.0f)
                   if (isPlaying) {
                     start()
                   }
                 }
-                setOnErrorListener { _, _, _ ->
-                  true // Prevent error popups
-                }
+                setOnErrorListener { _, _, _ -> true }
               }
             },
             update = { videoView ->
               val targetUri = Uri.parse(videoUriString)
-              // Only reset URI if it changed
               if (videoView.tag != videoUriString) {
                 videoView.tag = videoUriString
                 isPrepared = false
                 videoView.setVideoURI(targetUri)
               }
 
-              // Play / Pause and Seek synchronization
               if (isPrepared) {
-                val seekTarget = (activeClip?.startOffsetMs ?: 0L) + clipProgressMs
-                val diff = Math.abs(videoView.currentPosition - seekTarget)
-                if (diff > 250) {
-                  videoView.seekTo(seekTarget.toInt())
+                val seekTarget = ((activeClip?.startOffsetMs ?: 0L) + clipProgressMs).toInt()
+                val currentPos = videoView.currentPosition
+                if (abs(currentPos - seekTarget) > 250) {
+                  videoView.seekTo(seekTarget)
                 }
 
                 if (isPlaying && !videoView.isPlaying) {
@@ -230,7 +216,6 @@ fun VideoPreviewCanvas(
             modifier = Modifier.fillMaxSize()
           )
         } else {
-          // Fallback Canvas if no real video is loaded yet
           Canvas(modifier = Modifier.fillMaxSize()) {
             drawVideoFrame(
               clip = activeClip,
@@ -240,7 +225,6 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Live Filter / Shaders Overlay on top of real video
         if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.effect != VideoEffect.NONE)) {
           Canvas(modifier = Modifier.fillMaxSize()) {
             applyFilterAndEffects(
@@ -251,7 +235,6 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Text Overlays
         activeTexts.forEach { textOverlay ->
           Box(
             modifier = Modifier
@@ -280,7 +263,6 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Active Stickers
         activeStickers.forEach { sticker ->
           Box(
             modifier = Modifier
@@ -296,41 +278,8 @@ fun VideoPreviewCanvas(
             )
           }
         }
-
-        // Filter / Effect active badge in corner
-        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.effect != VideoEffect.NONE)) {
-          Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = Color(0xAA000000),
-            modifier = Modifier
-              .align(Alignment.TopStart)
-              .padding(6.dp)
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-              horizontalArrangement = Arrangement.spacedBy(4.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              if (activeClip.filter != VideoFilter.ORIGINAL) {
-                Text(
-                  text = activeClip.filter.displayName,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = GoldAccent
-                )
-              }
-              if (activeClip.effect != VideoEffect.NONE) {
-                Text(
-                  text = "• ${activeClip.effect.displayName}",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = EmeraldPrimary
-                )
-              }
-            }
-          }
-        }
       }
 
-      // Fullscreen toggle button
       IconButton(
         onClick = { isFullscreen = !isFullscreen },
         modifier = Modifier
@@ -348,7 +297,6 @@ fun VideoPreviewCanvas(
       }
     }
 
-    // Playback control buttons row
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -356,7 +304,6 @@ fun VideoPreviewCanvas(
       horizontalArrangement = Arrangement.Center,
       verticalAlignment = Alignment.CenterVertically
     ) {
-      // Step back 1 frame (-100ms)
       IconButton(
         onClick = onStepBackward,
         modifier = Modifier.size(36.dp)
@@ -366,7 +313,6 @@ fun VideoPreviewCanvas(
 
       Spacer(modifier = Modifier.width(16.dp))
 
-      // Main Play / Pause glowing pill
       FilledIconButton(
         onClick = onTogglePlay,
         modifier = Modifier
@@ -386,7 +332,6 @@ fun VideoPreviewCanvas(
 
       Spacer(modifier = Modifier.width(16.dp))
 
-      // Step forward 1 frame (+100ms)
       IconButton(
         onClick = onStepForward,
         modifier = Modifier.size(36.dp)
@@ -397,7 +342,6 @@ fun VideoPreviewCanvas(
   }
 }
 
-// Fallback Canvas rendering helper
 private fun DrawScope.drawVideoFrame(
   clip: VideoClip?,
   clipProgressMs: Long,
@@ -432,7 +376,6 @@ private fun DrawScope.drawVideoFrame(
   )
 }
 
-// Helper to apply real color filter & VFX overlays over the playing video
 private fun DrawScope.applyFilterAndEffects(
   filter: VideoFilter,
   effect: VideoEffect,
@@ -440,127 +383,67 @@ private fun DrawScope.applyFilterAndEffects(
 ) {
   when (filter) {
     VideoFilter.ORIGINAL -> {}
-    VideoFilter.WARM_DESI -> {
-      drawRect(color = Color(0x33FFB300), blendMode = BlendMode.Color)
-    }
+    VideoFilter.WARM_DESI -> drawRect(color = Color(0x33FFB300), blendMode = BlendMode.Color)
     VideoFilter.BOLLYWOOD -> {
       drawRect(
-        brush = Brush.verticalGradient(
-          colors = listOf(Color(0x33FF6D00), Color(0x440097A7))
-        ),
+        brush = Brush.verticalGradient(listOf(Color(0x33FF6D00), Color(0x440097A7))),
         blendMode = BlendMode.Overlay
       )
     }
-    VideoFilter.COOL_TEAL -> {
-      drawRect(color = Color(0x3300E5FF), blendMode = BlendMode.Color)
-    }
-    VideoFilter.VINTAGE_90S -> {
-      drawRect(color = Color(0x44BCAAA4), blendMode = BlendMode.Color)
-    }
-    VideoFilter.MOODY_NOIR -> {
-      drawRect(color = Color(0x99000000), blendMode = BlendMode.Saturation)
-    }
-    VideoFilter.EMERALD_DREAM -> {
-      drawRect(color = Color(0x4400E676), blendMode = BlendMode.Color)
-    }
+    VideoFilter.COOL_TEAL -> drawRect(color = Color(0x3300E5FF), blendMode = BlendMode.Color)
+    VideoFilter.VINTAGE_90S -> drawRect(color = Color(0x44BCAAA4), blendMode = BlendMode.Color)
+    VideoFilter.MOODY_NOIR -> drawRect(color = Color(0x99000000), blendMode = BlendMode.Saturation)
+    VideoFilter.EMERALD_DREAM -> drawRect(color = Color(0x4400E676), blendMode = BlendMode.Color)
     VideoFilter.CYBER_NEON -> {
       drawRect(
-        brush = Brush.horizontalGradient(
-          colors = listOf(Color(0x44FF007F), Color(0x4400F0FF))
-        ),
+        brush = Brush.horizontalGradient(listOf(Color(0x44FF007F), Color(0x4400F0FF))),
         blendMode = BlendMode.Hardlight
       )
     }
-    VideoFilter.SUNSET_CHAI -> {
-      drawRect(color = Color(0x44FF5722), blendMode = BlendMode.ColorBurn)
-    }
-    VideoFilter.MONOCHROME -> {
-      drawRect(color = Color(0xEE000000), blendMode = BlendMode.Saturation)
-    }
+    VideoFilter.SUNSET_CHAI -> drawRect(color = Color(0x44FF5722), blendMode = BlendMode.ColorBurn)
+    VideoFilter.MONOCHROME -> drawRect(color = Color(0xEE000000), blendMode = BlendMode.Saturation)
   }
 
   when (effect) {
     VideoEffect.NONE -> {}
     VideoEffect.GLITCH -> {
       val glitchLineY = (animPhase * size.height) % size.height
-      drawRect(
-        color = Color(0x8800E5FF),
-        topLeft = Offset(0f, glitchLineY),
-        size = Size(size.width, 14f),
-        blendMode = BlendMode.Screen
-      )
-      drawRect(
-        color = Color(0x88FF0055),
-        topLeft = Offset(10f, (glitchLineY + 24f) % size.height),
-        size = Size(size.width - 20f, 8f),
-        blendMode = BlendMode.Difference
-      )
+      drawRect(color = Color(0x8800E5FF), topLeft = Offset(0f, glitchLineY), size = Size(size.width, 14f), blendMode = BlendMode.Screen)
+      drawRect(color = Color(0x88FF0055), topLeft = Offset(10f, (glitchLineY + 24f) % size.height), size = Size(size.width - 20f, 8f), blendMode = BlendMode.Difference)
     }
     VideoEffect.RGB_SPLIT -> {
-      drawRect(
-        color = Color(0x33FF0000),
-        topLeft = Offset(-6f, 0f),
-        size = size,
-        blendMode = BlendMode.Screen
-      )
-      drawRect(
-        color = Color(0x3300FFFF),
-        topLeft = Offset(6f, 0f),
-        size = size,
-        blendMode = BlendMode.Screen
-      )
+      drawRect(color = Color(0x33FF0000), topLeft = Offset(-6f, 0f), size = size, blendMode = BlendMode.Screen)
+      drawRect(color = Color(0x3300FFFF), topLeft = Offset(6f, 0f), size = size, blendMode = BlendMode.Screen)
     }
     VideoEffect.FILM_GRAIN -> {
       val random = Random((animPhase * 100).toInt())
       for (i in 0..40) {
         val rx = random.nextFloat() * size.width
         val ry = random.nextFloat() * size.height
-        drawCircle(
-          color = Color(0x55FFFFFF),
-          radius = 1.5f,
-          center = Offset(rx, ry)
-        )
+        drawCircle(color = Color(0x55FFFFFF), radius = 1.5f, center = Offset(rx, ry))
       }
     }
     VideoEffect.VHS_SCANLINES -> {
       var y = 0f
       while (y < size.height) {
-        drawLine(
-          color = Color(0x22000000),
-          start = Offset(0f, y),
-          end = Offset(size.width, y),
-          strokeWidth = 2f
-        )
+        drawLine(color = Color(0x22000000), start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 2f)
         y += 8f
       }
     }
     VideoEffect.VIGNETTE -> {
       drawRect(
-        brush = Brush.radialGradient(
-          colors = listOf(Color.Transparent, Color(0xAA000000)),
-          center = Offset(size.width * 0.5f, size.height * 0.5f),
-          radius = size.width * 0.65f
-        )
+        brush = Brush.radialGradient(listOf(Color.Transparent, Color(0xAA000000)), center = Offset(size.width * 0.5f, size.height * 0.5f), radius = size.width * 0.65f)
       )
     }
     VideoEffect.DREAMY_BLUR -> {
       drawRect(
-        brush = Brush.radialGradient(
-          colors = listOf(Color(0x44FFFFFF), Color.Transparent),
-          center = Offset(size.width * 0.5f, size.height * 0.5f),
-          radius = size.width * 0.5f
-        ),
+        brush = Brush.radialGradient(listOf(Color(0x44FFFFFF), Color.Transparent), center = Offset(size.width * 0.5f, size.height * 0.5f), radius = size.width * 0.5f),
         blendMode = BlendMode.Plus
       )
     }
     VideoEffect.MOTION_SHAKE -> {
       val shakeOffset = if (animPhase > 0.5f) 4f else -4f
-      drawRect(
-        color = Color(0x22FFFFFF),
-        topLeft = Offset(shakeOffset, shakeOffset),
-        size = size,
-        blendMode = BlendMode.Overlay
-      )
+      drawRect(color = Color(0x22FFFFFF), topLeft = Offset(shakeOffset, shakeOffset), size = size, blendMode = BlendMode.Overlay)
     }
   }
 }
