@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ fun EditorScreen(
   onNavigateBack: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
   val project by viewModel.currentProject.collectAsState()
   val playheadMs by viewModel.playheadMs.collectAsState()
   val isPlaying by viewModel.isPlaying.collectAsState()
@@ -68,11 +71,20 @@ fun EditorScreen(
     onNavigateBack()
   }
 
-  // Media picker to add custom clips
+  // Media picker with Persistent URI Permission Grant (Fix for Video & Sound)
   val mediaPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri ->
     if (uri != null) {
+      try {
+        context.contentResolver.takePersistableUriPermission(
+          uri,
+          Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
+      } catch (e: Exception) {
+        // Fallback for non-persistable content URIs
+      }
+
       viewModel.addNewClip(
         title = "Gallery Video",
         colorStart = "#136A8A",
@@ -83,7 +95,10 @@ fun EditorScreen(
   }
 
   if (project == null) {
-    Box(modifier = Modifier.fillMaxSize().background(CharcoalBackground), contentAlignment = Alignment.Center) {
+    Box(
+      modifier = Modifier.fillMaxSize().background(CharcoalBackground),
+      contentAlignment = Alignment.Center
+    ) {
       CircularProgressIndicator(color = EmeraldPrimary)
     }
     return
@@ -116,14 +131,14 @@ fun EditorScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Live Video Preview Canvas with real shader filters & effects
+      // 1. Live Video Preview Canvas
       VideoPreviewCanvas(
         project = currentProj,
         playheadMs = playheadMs,
         isPlaying = isPlaying,
         previewQuality = previewQuality,
         onTogglePlay = { viewModel.togglePlayback() },
-        onStepBackward = { viewModel.setPlayheadMs(playheadMs - 100L) },
+        onStepBackward = { viewModel.setPlayheadMs((playheadMs - 100L).coerceAtLeast(0L)) },
         onStepForward = { viewModel.setPlayheadMs(playheadMs + 100L) },
         onChangeRatioClick = { viewModel.setToolTab(ToolTab.CANVAS) },
         onChangeQualityClick = {
@@ -133,7 +148,7 @@ fun EditorScreen(
         modifier = Modifier.weight(1f)
       )
 
-      // 2. Interactive Multi-Track Timeline (Ruler, Clips, Audio, Text, Playhead)
+      // 2. Interactive Multi-Track Timeline (Supports Reorder, Ruler, Clips, Playhead)
       TimelineView(
         project = currentProj,
         playheadMs = playheadMs,
@@ -150,11 +165,13 @@ fun EditorScreen(
           viewModel.setToolTab(ToolTab.TRANSITIONS)
         },
         onAddClipClick = {
-          mediaPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+          mediaPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+          )
         },
         onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
         onZoomIn = { viewModel.setTimelineZoom(timelineZoom + 0.3f) },
-        onZoomOut = { viewModel.setTimelineZoom(timelineZoom - 0.3f) }
+        onZoomOut = { viewModel.setTimelineZoom((timelineZoom - 0.3f).coerceAtLeast(0.5f)) }
       )
 
       // 3. Bottom Tool Sheet & Editing Action Bar
