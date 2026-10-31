@@ -1,0 +1,6 @@
+{
+  "name": "DesiCut Studio",
+  "description": "Create. Edit. Inspire. Professional mobile-first video editor with multi-track timeline, effects, templates, and export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

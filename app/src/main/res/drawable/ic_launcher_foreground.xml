@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Film frame background rounded -->
+    <path
+        android:fillColor="#1A2D23"
+        android:pathData="M32,28 L76,28 A6,6 0 0,1 82,34 L82,74 A6,6 0 0,1 76,80 L32,80 A6,6 0 0,1 26,74 L26,34 A6,6 0 0,1 32,28 Z" />
+    
+    <!-- Top film sprockets / stripes in emerald and gold -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M26,34 L82,34 L82,41 L26,41 Z" />
+    <path
+        android:fillColor="#040906"
+        android:pathData="M32,34 L36,41 L40,41 L36,34 Z M46,34 L50,41 L54,41 L50,34 Z M60,34 L64,41 L68,41 L64,34 Z M74,34 L78,41 L82,41 L78,34 Z" />
+
+    <!-- Play symbol in center -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M48,51 L66,61 L48,71 Z" />
+
+    <!-- Desi Indian Lotus / Tricolor sparkle or scissors accent in gold -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M73,47 L75,51 L79,53 L75,55 L73,59 L71,55 L67,53 L71,51 Z" />
+</vector>
