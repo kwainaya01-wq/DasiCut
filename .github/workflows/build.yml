@@ -37,7 +37,9 @@ jobs:
           cp debug.keystore app/debug.keystore || true
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon -Djava.awt.headless=true --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
+        env:
+          JAVA_OPTS: "-Djava.awt.headless=true"
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
