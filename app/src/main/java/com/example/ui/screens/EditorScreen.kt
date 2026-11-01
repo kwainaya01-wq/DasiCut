@@ -86,14 +86,12 @@ fun EditorScreen(
       }
 
       viewModel.addNewClip(
-        title = "Gallery Video",
-        colorStart = "#136A8A",
-        colorEnd = "#267871",
-        uri = uri.toString()
-      )
-    }
-  }
-
+  title = "Gallery Video",
+  colorStart = "#136A8A",
+  colorEnd = "#267871",
+  localUri = uri.toString()
+)
+      
   if (project == null) {
     Box(
       modifier = Modifier.fillMaxSize().background(CharcoalBackground),
