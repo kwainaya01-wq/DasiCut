@@ -52,26 +52,22 @@ fun EditorScreen(
   val canRedo by viewModel.canRedo.collectAsState()
   val previewQuality by viewModel.previewQuality.collectAsState()
 
-  // Export pipeline states
   val isExporting by viewModel.isExporting.collectAsState()
   val exportProgress by viewModel.exportProgress.collectAsState()
   val exportStage by viewModel.exportStage.collectAsState()
   val exportedFilePath by viewModel.exportedFilePath.collectAsState()
 
-  // Sheet / Modal visibility
   var showExportDialog by remember { mutableStateOf(false) }
   var showAudioPicker by remember { mutableStateOf(false) }
   var showTextEditor by remember { mutableStateOf(false) }
   var showStickerPicker by remember { mutableStateOf(false) }
   var showRenameDialog by remember { mutableStateOf(false) }
 
-  // Handle system back navigation
   BackHandler {
     viewModel.pausePlayback()
     onNavigateBack()
   }
 
-  // Media picker with Persistent URI Permission Grant
   val mediaPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri ->
@@ -130,7 +126,6 @@ fun EditorScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Live Video Preview Canvas
       VideoPreviewCanvas(
         project = currentProj,
         playheadMs = playheadMs,
@@ -147,7 +142,6 @@ fun EditorScreen(
         modifier = Modifier.weight(1f)
       )
 
-      // 2. Interactive Multi-Track Timeline
       TimelineView(
         project = currentProj,
         playheadMs = playheadMs,
@@ -173,7 +167,6 @@ fun EditorScreen(
         onZoomOut = { viewModel.setTimelineZoom((timelineZoom - 0.3f).coerceAtLeast(0.5f)) }
       )
 
-      // 3. Bottom Tool Sheet & Editing Action Bar
       ToolSheet(
         activeTab = activeToolTab,
         selectedClip = selectedClip,
@@ -224,9 +217,6 @@ fun EditorScreen(
     }
   }
 
-  // --- Modal Sheets & Dialogs ---
-
-  // Export Dialog
   if (showExportDialog || isExporting || exportedFilePath != null) {
     ExportDialog(
       isExporting = isExporting,
@@ -243,7 +233,6 @@ fun EditorScreen(
     )
   }
 
-  // Audio Picker Sheet
   if (showAudioPicker) {
     AudioPickerSheet(
       onDismiss = { showAudioPicker = false },
@@ -253,7 +242,6 @@ fun EditorScreen(
     )
   }
 
-  // Text Editor Dialog
   if (showTextEditor) {
     TextEditorDialog(
       onDismiss = { showTextEditor = false },
@@ -263,7 +251,6 @@ fun EditorScreen(
     )
   }
 
-  // Sticker Picker Sheet
   if (showStickerPicker) {
     StickerPickerSheet(
       onDismiss = { showStickerPicker = false },
@@ -273,7 +260,6 @@ fun EditorScreen(
     )
   }
 
-  // Rename Project Dialog
   if (showRenameDialog) {
     AlertDialog(
       onDismissRequest = { showRenameDialog = false },
@@ -328,7 +314,6 @@ private fun EditorTopBar(
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically
   ) {
-    // Back Button & Project Title
     Row(verticalAlignment = Alignment.CenterVertically) {
       IconButton(onClick = onBackClick, modifier = Modifier.size(36.dp).testTag("editor_back_button")) {
         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
@@ -348,7 +333,6 @@ private fun EditorTopBar(
       )
     }
 
-    // Undo / Redo & Export Action Pill
     Row(
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically
