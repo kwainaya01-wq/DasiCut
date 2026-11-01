@@ -71,7 +71,7 @@ fun EditorScreen(
     onNavigateBack()
   }
 
-  // Media picker with Persistent URI Permission Grant (Fix for Video & Sound)
+  // Media picker with Persistent URI Permission Grant
   val mediaPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri ->
@@ -81,17 +81,18 @@ fun EditorScreen(
           uri,
           Intent.FLAG_GRANT_READ_URI_PERMISSION
         )
-      } catch (e: Exception) {
-        // Fallback for non-persistable content URIs
+      } catch (_: Exception) {
       }
 
       viewModel.addNewClip(
-  title = "Gallery Video",
-  colorStart = "#136A8A",
-  colorEnd = "#267871",
-  localUri = uri.toString()
-)
-      
+        title = "Gallery Video",
+        colorStart = "#136A8A",
+        colorEnd = "#267871",
+        localUri = uri.toString()
+      )
+    }
+  }
+
   if (project == null) {
     Box(
       modifier = Modifier.fillMaxSize().background(CharcoalBackground),
@@ -146,7 +147,7 @@ fun EditorScreen(
         modifier = Modifier.weight(1f)
       )
 
-      // 2. Interactive Multi-Track Timeline (Supports Reorder, Ruler, Clips, Playhead)
+      // 2. Interactive Multi-Track Timeline
       TimelineView(
         project = currentProj,
         playheadMs = playheadMs,
@@ -378,7 +379,6 @@ private fun EditorTopBar(
 
       Spacer(modifier = Modifier.width(4.dp))
 
-      // Glowing Emerald Export Button
       Button(
         onClick = onExportClick,
         colors = ButtonDefaults.buttonColors(
