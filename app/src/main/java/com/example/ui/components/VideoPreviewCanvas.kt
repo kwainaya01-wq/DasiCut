@@ -35,24 +35,6 @@ import com.example.ui.theme.*
 import kotlin.math.abs
 import kotlin.random.Random
 
-// Helper function to extract URI/path safely from VideoClip
-private fun getClipUriString(clip: VideoClip?): String? {
-  if (clip == null) return null
-  return try {
-    val field = clip.javaClass.declaredFields.firstOrNull { 
-      it.name.contains("uri", ignoreCase = true) || 
-      it.name.contains("path", ignoreCase = true) ||
-      it.name.contains("url", ignoreCase = true)
-    }
-    field?.let {
-      it.isAccessible = true
-      it.get(clip) as? String
-    }
-  } catch (_: Exception) {
-    null
-  }
-}
-
 @Composable
 fun VideoPreviewCanvas(
   project: Project,
@@ -190,7 +172,7 @@ fun VideoPreviewCanvas(
           .border(1.dp, CharcoalBorder, RoundedCornerShape(6.dp))
           .background(Color.Black)
       ) {
-        val videoUriString = getClipUriString(activeClip)
+        val videoUriString = activeClip?.localUri
         if (!videoUriString.isNullOrEmpty()) {
           var isPrepared by remember { mutableStateOf(false) }
 
@@ -216,7 +198,7 @@ fun VideoPreviewCanvas(
               }
 
               if (isPrepared) {
-                val seekTarget = ((activeClip?.startOffsetMs ?: 0L) + clipProgressMs).toInt()
+                val seekTarget = clipProgressMs.toInt()
                 val currentPos = videoView.currentPosition
                 if (abs(currentPos - seekTarget) > 250) {
                   videoView.seekTo(seekTarget)
