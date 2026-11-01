@@ -35,6 +35,24 @@ import com.example.ui.theme.*
 import kotlin.math.abs
 import kotlin.random.Random
 
+// Helper function to extract URI/path safely from VideoClip
+private fun getClipUriString(clip: VideoClip?): String? {
+  if (clip == null) return null
+  return try {
+    val field = clip.javaClass.declaredFields.firstOrNull { 
+      it.name.contains("uri", ignoreCase = true) || 
+      it.name.contains("path", ignoreCase = true) ||
+      it.name.contains("url", ignoreCase = true)
+    }
+    field?.let {
+      it.isAccessible = true
+      it.get(clip) as? String
+    }
+  } catch (_: Exception) {
+    null
+  }
+}
+
 @Composable
 fun VideoPreviewCanvas(
   project: Project,
@@ -172,16 +190,14 @@ fun VideoPreviewCanvas(
           .border(1.dp, CharcoalBorder, RoundedCornerShape(6.dp))
           .background(Color.Black)
       ) {
-        val videoUriString = activeClip?.uri
+        val videoUriString = getClipUriString(activeClip)
         if (!videoUriString.isNullOrEmpty()) {
-          var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
           var isPrepared by remember { mutableStateOf(false) }
 
           AndroidView(
             factory = { ctx ->
               VideoView(ctx).apply {
                 setOnPreparedListener { mp ->
-                  mediaPlayerRef = mp
                   isPrepared = true
                   mp.setVolume(1.0f, 1.0f)
                   if (isPlaying) {
