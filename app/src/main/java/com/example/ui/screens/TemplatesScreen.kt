@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -145,6 +149,10 @@ fun TemplatesScreen(
       onUseTemplate = {
         viewModel.useTemplate(tpl)
         previewTemplate = null
+      },
+      onUseTemplateWithVideos = { uris ->
+        viewModel.useTemplateWithUserVideos(tpl, uris)
+        previewTemplate = null
       }
     )
   }
@@ -274,10 +282,21 @@ private fun TemplateCard(
 private fun TemplatePreviewModal(
   template: Template,
   onDismiss: () -> Unit,
-  onUseTemplate: () -> Unit
+  onUseTemplate: () -> Unit,
+  onUseTemplateWithVideos: (List<Uri>) -> Unit = {}
 ) {
   val startCol = try { Color(android.graphics.Color.parseColor(template.gradientColors.first)) } catch (_: Exception) { EmeraldDark }
   val endCol = try { Color(android.graphics.Color.parseColor(template.gradientColors.second)) } catch (_: Exception) { EmeraldPrimary }
+
+  val multiPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickMultipleVisualMedia(
+      maxItems = template.requiredClipsCount.coerceAtLeast(2)
+    )
+  ) { uris ->
+    if (uris.isNotEmpty()) {
+      onUseTemplateWithVideos(uris)
+    }
+  }
 
   Dialog(onDismissRequest = onDismiss) {
     Surface(
@@ -373,19 +392,39 @@ private fun TemplatePreviewModal(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // "Use Template" button
+        // "Import My Videos" primary button
         Button(
-          onClick = onUseTemplate,
+          onClick = {
+            multiPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+          },
           colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = CharcoalBackground),
           shape = RoundedCornerShape(10.dp),
           modifier = Modifier
             .fillMaxWidth()
             .height(44.dp)
+            .testTag("import_template_videos_button")
+        ) {
+          Icon(Icons.Default.VideoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(6.dp))
+          Text("Import My Videos (${template.requiredClipsCount} Slots)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // "Use Demo Template" fallback button
+        OutlinedButton(
+          onClick = onUseTemplate,
+          colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+          border = BorderStroke(1.dp, CharcoalBorder),
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
             .testTag("use_template_button")
         ) {
-          Icon(Icons.Default.MovieFilter, contentDescription = null, modifier = Modifier.size(18.dp))
+          Icon(Icons.Default.MovieFilter, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondary)
           Spacer(modifier = Modifier.width(6.dp))
-          Text("Use This Template", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text("Use Demo Template Directly", fontSize = 13.sp)
         }
       }
     }

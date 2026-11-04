@@ -49,7 +49,9 @@ fun HomeScreen(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri ->
     if (uri != null) {
-      viewModel.createNewProject(name = "New Media Edit", ratio = AspectRatio.RATIO_9_16)
+      viewModel.createProjectWithVideo(uri) { newProj ->
+        onNavigateToEditor(newProj)
+      }
     }
   }
 

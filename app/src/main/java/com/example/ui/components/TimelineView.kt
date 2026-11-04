@@ -41,6 +41,10 @@ fun TimelineView(
   onSplitClick: () -> Unit,
   onZoomIn: () -> Unit,
   onZoomOut: () -> Unit,
+  onReorderClips: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
+  onTrimClip: (clipId: String, startMs: Long, endMs: Long) -> Unit = { _, _, _ -> },
+  onReplaceClipClick: (clipId: String) -> Unit = {},
+  onAudioMove: (audioId: String, newStartMs: Long) -> Unit = { _, _ -> },
   modifier: Modifier = Modifier
 ) {
   val scrollState = rememberScrollState()
@@ -95,6 +99,47 @@ fun TimelineView(
           Icon(Icons.Default.Add, contentDescription = "Add Clip", modifier = Modifier.size(14.dp), tint = EmeraldPrimary)
           Spacer(modifier = Modifier.width(4.dp))
           Text("Add", style = MaterialTheme.typography.labelSmall)
+        }
+
+        // Clip-specific actions when a clip is selected (Reorder, Replace)
+        val selectedIndex = project.clips.indexOfFirst { it.id == selectedClipId }
+        if (selectedIndex >= 0) {
+          if (selectedIndex > 0) {
+            FilledTonalButton(
+              onClick = { onReorderClips(selectedIndex, selectedIndex - 1) },
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              colors = ButtonDefaults.filledTonalButtonColors(containerColor = CharcoalCard, contentColor = TextSecondary),
+              modifier = Modifier.height(30.dp).testTag("timeline_move_left")
+            ) {
+              Icon(Icons.Default.ArrowBack, contentDescription = "Move Left", modifier = Modifier.size(12.dp))
+              Spacer(modifier = Modifier.width(2.dp))
+              Text("Move", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+            }
+          }
+
+          if (selectedIndex < project.clips.size - 1) {
+            FilledTonalButton(
+              onClick = { onReorderClips(selectedIndex, selectedIndex + 1) },
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              colors = ButtonDefaults.filledTonalButtonColors(containerColor = CharcoalCard, contentColor = TextSecondary),
+              modifier = Modifier.height(30.dp).testTag("timeline_move_right")
+            ) {
+              Text("Move", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+              Spacer(modifier = Modifier.width(2.dp))
+              Icon(Icons.Default.ArrowForward, contentDescription = "Move Right", modifier = Modifier.size(12.dp))
+            }
+          }
+
+          FilledTonalButton(
+            onClick = { onReplaceClipClick(project.clips[selectedIndex].id) },
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            colors = ButtonDefaults.filledTonalButtonColors(containerColor = CharcoalCard, contentColor = GoldAccent),
+            modifier = Modifier.height(30.dp).testTag("timeline_replace_clip")
+          ) {
+            Icon(Icons.Default.SwapHoriz, contentDescription = "Replace", modifier = Modifier.size(14.dp), tint = GoldAccent)
+            Spacer(modifier = Modifier.width(2.dp))
+            Text("Replace", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+          }
         }
       }
 
@@ -182,19 +227,30 @@ fun TimelineView(
                   .background(Brush.horizontalGradient(listOf(startCol.copy(alpha = 0.5f), endCol.copy(alpha = 0.7f))))
                   .padding(horizontal = 6.dp, vertical = 4.dp)
               ) {
-                // Left trim indicator if selected
+                // Left trim handle if selected
                 if (isSelected) {
                   Box(
                     modifier = Modifier
                       .align(Alignment.CenterStart)
-                      .width(4.dp)
+                      .width(14.dp)
                       .fillMaxHeight()
-                      .background(EmeraldPrimary, RoundedCornerShape(2.dp))
-                  )
+                      .background(EmeraldPrimary, RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp))
+                      .pointerInput(clip.id) {
+                        detectDragGestures { change, dragAmount ->
+                          change.consume()
+                          val deltaMs = (dragAmount.x / dpPerSecond.value * 1000f * clip.speed).toLong()
+                          val newStart = (clip.trimStartMs + deltaMs).coerceIn(0L, clip.trimEndMs - 200L)
+                          onTrimClip(clip.id, newStart, clip.trimEndMs)
+                        }
+                      },
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Box(modifier = Modifier.width(2.dp).height(18.dp).background(CharcoalBackground))
+                  }
                 }
 
                 // Title and duration
-                Column(modifier = Modifier.align(Alignment.CenterStart).padding(start = if (isSelected) 6.dp else 2.dp)) {
+                Column(modifier = Modifier.align(Alignment.CenterStart).padding(start = if (isSelected) 18.dp else 4.dp)) {
                   Text(
                     text = clip.title,
                     style = MaterialTheme.typography.labelSmall,
@@ -203,7 +259,7 @@ fun TimelineView(
                     maxLines = 1
                   )
                   Text(
-                    text = "${(clip.effectiveDurationMs / 1000f)}s",
+                    text = "${(clip.effectiveDurationMs / 1000f).formatOneDecimal()}s",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 9.sp
@@ -215,7 +271,7 @@ fun TimelineView(
                   Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = Color(0x99000000),
-                    modifier = Modifier.align(Alignment.TopEnd)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(end = if (isSelected) 16.dp else 2.dp)
                   ) {
                     Text(
                       text = if (clip.speed != 1.0f) "${clip.speed}x" else "Fx",
@@ -226,15 +282,26 @@ fun TimelineView(
                   }
                 }
 
-                // Right trim indicator if selected
+                // Right trim handle if selected
                 if (isSelected) {
                   Box(
                     modifier = Modifier
                       .align(Alignment.CenterEnd)
-                      .width(4.dp)
+                      .width(14.dp)
                       .fillMaxHeight()
-                      .background(EmeraldPrimary, RoundedCornerShape(2.dp))
-                  )
+                      .background(EmeraldPrimary, RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
+                      .pointerInput(clip.id) {
+                        detectDragGestures { change, dragAmount ->
+                          change.consume()
+                          val deltaMs = (dragAmount.x / dpPerSecond.value * 1000f * clip.speed).toLong()
+                          val newEnd = (clip.trimEndMs + deltaMs).coerceIn(clip.trimStartMs + 200L, clip.durationMs)
+                          onTrimClip(clip.id, clip.trimStartMs, newEnd)
+                        }
+                      },
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Box(modifier = Modifier.width(2.dp).height(18.dp).background(CharcoalBackground))
+                  }
                 }
               }
             }
@@ -266,7 +333,7 @@ fun TimelineView(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // 3. Audio Track
+        // 3. Audio Track (Multi-track with volume & drag to reposition)
         Box(
           modifier = Modifier
             .fillMaxWidth()
@@ -292,7 +359,7 @@ fun TimelineView(
           } else {
             project.audioTracks.forEach { audio ->
               val audioOffsetDp = msToDp(audio.startAtMs).dp
-              val audioWidthDp = msToDp(audio.durationMs).coerceAtLeast(50f).dp
+              val audioWidthDp = msToDp(audio.durationMs).coerceAtLeast(60f).dp
               val isSelected = audio.id == selectedAudioId
 
               Surface(
@@ -303,6 +370,14 @@ fun TimelineView(
                   .offset(x = audioOffsetDp)
                   .width(audioWidthDp)
                   .fillMaxHeight()
+                  .pointerInput(audio.id) {
+                    detectDragGestures { change, dragAmount ->
+                      change.consume()
+                      val deltaMs = (dragAmount.x / dpPerSecond.value * 1000f).toLong()
+                      val newStart = (audio.startAtMs + deltaMs).coerceAtLeast(0L)
+                      onAudioMove(audio.id, newStart)
+                    }
+                  }
                   .clickable { onSelectAudio(audio.id) }
               ) {
                 Row(
@@ -310,16 +385,35 @@ fun TimelineView(
                     .fillMaxSize()
                     .background(Brush.horizontalGradient(listOf(Color(0xFF0D3B66), Color(0xFF00A896))))
                     .padding(horizontal = 6.dp),
-                  verticalAlignment = Alignment.CenterVertically
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                  Icon(Icons.Default.MusicNote, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(12.dp))
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = "${audio.title} (${(audio.durationMs / 1000f).toInt()}s)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    maxLines = 1
-                  )
+                  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(
+                      imageVector = if (audio.isMuted) Icons.Default.VolumeMute else Icons.Default.MusicNote,
+                      contentDescription = null,
+                      tint = if (audio.isMuted) TextMuted else GoldAccent,
+                      modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                      text = "${audio.title} (${(audio.durationMs / 1000f).toInt()}s)",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = Color.White,
+                      maxLines = 1
+                    )
+                  }
+                  Surface(
+                    shape = RoundedCornerShape(3.dp),
+                    color = Color(0x66000000)
+                  ) {
+                    Text(
+                      text = if (audio.isMuted) "Mute" else "${(audio.volume * 100).toInt()}%",
+                      fontSize = 8.sp,
+                      color = if (audio.isMuted) TextMuted else EmeraldPrimary,
+                      modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                    )
+                  }
                 }
               }
             }
@@ -435,4 +529,8 @@ private fun TimeRuler(
       )
     }
   }
+}
+
+private fun Float.formatOneDecimal(): String {
+  return "%.1f".format(this)
 }

@@ -1,6 +1,10 @@
 package com.example.ui.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,12 +34,22 @@ import java.util.UUID
 @Composable
 fun AudioPickerSheet(
   onDismiss: () -> Unit,
-  onAudioSelected: (AudioTrack) -> Unit
+  onAudioSelected: (AudioTrack) -> Unit,
+  onImportCustomAudio: ((Uri) -> Unit)? = null
 ) {
   var selectedTab by remember { mutableIntStateOf(0) } // 0: Music, 1: Sound FX, 2: Voice Record
   var isRecording by remember { mutableStateOf(false) }
   var recordingSeconds by remember { mutableIntStateOf(0) }
   val coroutineScope = rememberCoroutineScope()
+
+  val audioPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri ->
+    if (uri != null) {
+      onImportCustomAudio?.invoke(uri)
+      onDismiss()
+    }
+  }
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -58,7 +72,22 @@ fun AudioPickerSheet(
         }
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(8.dp))
+
+      // Button to import device audio
+      OutlinedButton(
+        onClick = { audioPickerLauncher.launch("audio/*") },
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldPrimary),
+        border = BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().testTag("import_device_audio_btn")
+      ) {
+        Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Import Audio File from Device Storage", fontWeight = FontWeight.Bold)
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
 
       // Tab selector: Music | Sound FX | Voiceover
       TabRow(

@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -20,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,7 +37,6 @@ fun EditorScreen(
   onNavigateBack: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val context = LocalContext.current
   val project by viewModel.currentProject.collectAsState()
   val playheadMs by viewModel.playheadMs.collectAsState()
   val isPlaying by viewModel.isPlaying.collectAsState()
@@ -52,48 +49,45 @@ fun EditorScreen(
   val canRedo by viewModel.canRedo.collectAsState()
   val previewQuality by viewModel.previewQuality.collectAsState()
 
+  // Export pipeline states
   val isExporting by viewModel.isExporting.collectAsState()
   val exportProgress by viewModel.exportProgress.collectAsState()
   val exportStage by viewModel.exportStage.collectAsState()
   val exportedFilePath by viewModel.exportedFilePath.collectAsState()
 
+  // Sheet / Modal visibility
   var showExportDialog by remember { mutableStateOf(false) }
   var showAudioPicker by remember { mutableStateOf(false) }
   var showTextEditor by remember { mutableStateOf(false) }
   var showStickerPicker by remember { mutableStateOf(false) }
   var showRenameDialog by remember { mutableStateOf(false) }
 
+  // Handle system back navigation
   BackHandler {
     viewModel.pausePlayback()
     onNavigateBack()
   }
 
+  // Media picker to add custom clips
   val mediaPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri ->
     if (uri != null) {
-      try {
-        context.contentResolver.takePersistableUriPermission(
-          uri,
-          Intent.FLAG_GRANT_READ_URI_PERMISSION
-        )
-      } catch (_: Exception) {
-      }
+      viewModel.importVideo(uri)
+    }
+  }
 
-      viewModel.addNewClip(
-        title = "Gallery Video",
-        colorStart = "#136A8A",
-        colorEnd = "#267871",
-        localUri = uri.toString()
-      )
+  // Media picker to replace an existing clip
+  val replacePickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    if (uri != null) {
+      viewModel.replaceSelectedClip(uri)
     }
   }
 
   if (project == null) {
-    Box(
-      modifier = Modifier.fillMaxSize().background(CharcoalBackground),
-      contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(CharcoalBackground), contentAlignment = Alignment.Center) {
       CircularProgressIndicator(color = EmeraldPrimary)
     }
     return
@@ -126,22 +120,30 @@ fun EditorScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
+      // 1. Live Video Preview Canvas with real shader filters & effects
       VideoPreviewCanvas(
         project = currentProj,
         playheadMs = playheadMs,
         isPlaying = isPlaying,
         previewQuality = previewQuality,
         onTogglePlay = { viewModel.togglePlayback() },
-        onStepBackward = { viewModel.setPlayheadMs((playheadMs - 100L).coerceAtLeast(0L)) },
+        onStepBackward = { viewModel.setPlayheadMs(playheadMs - 100L) },
         onStepForward = { viewModel.setPlayheadMs(playheadMs + 100L) },
         onChangeRatioClick = { viewModel.setToolTab(ToolTab.CANVAS) },
         onChangeQualityClick = {
           val nextQ = if (previewQuality == "1080p Full") "720p Fast" else "1080p Full"
           viewModel.setPreviewQuality(nextQ)
         },
+        onUpdateTextPosition = { textId, x, y ->
+          viewModel.updateTextPosition(textId, x, y)
+        },
+        onSelectText = { textId ->
+          viewModel.selectText(textId)
+        },
         modifier = Modifier.weight(1f)
       )
 
+      // 2. Interactive Multi-Track Timeline (Ruler, Clips, Audio, Text, Playhead)
       TimelineView(
         project = currentProj,
         playheadMs = playheadMs,
@@ -158,18 +160,28 @@ fun EditorScreen(
           viewModel.setToolTab(ToolTab.TRANSITIONS)
         },
         onAddClipClick = {
-          mediaPickerLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-          )
+          mediaPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
         },
         onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
         onZoomIn = { viewModel.setTimelineZoom(timelineZoom + 0.3f) },
-        onZoomOut = { viewModel.setTimelineZoom((timelineZoom - 0.3f).coerceAtLeast(0.5f)) }
+        onZoomOut = { viewModel.setTimelineZoom(timelineZoom - 0.3f) },
+        onReorderClips = { from, to -> viewModel.reorderClips(from, to) },
+        onTrimClip = { clipId, startMs, endMs -> viewModel.trimClip(clipId, startMs, endMs) },
+        onReplaceClipClick = { clipId ->
+          viewModel.selectClip(clipId)
+          replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+        },
+        onAudioMove = { audioId, newStartMs ->
+          viewModel.updateAudioStartTime(audioId, newStartMs)
+        }
       )
 
+      // 3. Bottom Tool Sheet & Editing Action Bar
       ToolSheet(
         activeTab = activeToolTab,
         selectedClip = selectedClip,
+        audioTracks = currentProj.audioTracks,
+        selectedAudioId = selectedAudioId,
         onTabSelected = { viewModel.setToolTab(it) },
         onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
         onTrimChanged = { startMs, endMs ->
@@ -208,6 +220,16 @@ fun EditorScreen(
         onFreezeFrameClick = {
           selectedClipId?.let { viewModel.freezeFrame(it) }
         },
+        onReplaceClipClick = {
+          replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+        },
+        onSelectAudio = { viewModel.selectAudio(it) },
+        onAudioVolumeChanged = { id, vol, muted ->
+          viewModel.updateAudioVolume(id, vol, muted)
+        },
+        onDeleteAudioClick = { id ->
+          viewModel.removeAudioTrack(id)
+        },
         onOpenAudioPicker = { showAudioPicker = true },
         onOpenTextEditor = { showTextEditor = true },
         onOpenStickerPicker = { showStickerPicker = true },
@@ -217,6 +239,9 @@ fun EditorScreen(
     }
   }
 
+  // --- Modal Sheets & Dialogs ---
+
+  // Export Dialog
   if (showExportDialog || isExporting || exportedFilePath != null) {
     ExportDialog(
       isExporting = isExporting,
@@ -233,15 +258,20 @@ fun EditorScreen(
     )
   }
 
+  // Audio Picker Sheet
   if (showAudioPicker) {
     AudioPickerSheet(
       onDismiss = { showAudioPicker = false },
       onAudioSelected = { track ->
         viewModel.addAudioTrack(track)
+      },
+      onImportCustomAudio = { uri ->
+        viewModel.importAudio(uri)
       }
     )
   }
 
+  // Text Editor Dialog
   if (showTextEditor) {
     TextEditorDialog(
       onDismiss = { showTextEditor = false },
@@ -251,6 +281,7 @@ fun EditorScreen(
     )
   }
 
+  // Sticker Picker Sheet
   if (showStickerPicker) {
     StickerPickerSheet(
       onDismiss = { showStickerPicker = false },
@@ -260,6 +291,7 @@ fun EditorScreen(
     )
   }
 
+  // Rename Project Dialog
   if (showRenameDialog) {
     AlertDialog(
       onDismissRequest = { showRenameDialog = false },
@@ -314,6 +346,7 @@ private fun EditorTopBar(
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically
   ) {
+    // Back Button & Project Title
     Row(verticalAlignment = Alignment.CenterVertically) {
       IconButton(onClick = onBackClick, modifier = Modifier.size(36.dp).testTag("editor_back_button")) {
         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
@@ -333,6 +366,7 @@ private fun EditorTopBar(
       )
     }
 
+    // Undo / Redo & Export Action Pill
     Row(
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically
@@ -363,6 +397,7 @@ private fun EditorTopBar(
 
       Spacer(modifier = Modifier.width(4.dp))
 
+      // Glowing Emerald Export Button
       Button(
         onClick = onExportClick,
         colors = ButtonDefaults.buttonColors(

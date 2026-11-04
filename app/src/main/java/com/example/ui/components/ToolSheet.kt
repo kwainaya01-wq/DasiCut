@@ -29,6 +29,8 @@ import com.example.ui.viewmodel.ToolTab
 fun ToolSheet(
   activeTab: ToolTab,
   selectedClip: VideoClip?,
+  audioTracks: List<AudioTrack> = emptyList(),
+  selectedAudioId: String? = null,
   onTabSelected: (ToolTab) -> Unit,
   onSplitClick: () -> Unit,
   onTrimChanged: (Long, Long) -> Unit,
@@ -43,6 +45,10 @@ fun ToolSheet(
   onDeleteClick: () -> Unit,
   onReverseClick: () -> Unit,
   onFreezeFrameClick: () -> Unit,
+  onReplaceClipClick: () -> Unit = {},
+  onSelectAudio: (String) -> Unit = {},
+  onAudioVolumeChanged: (String, Float, Boolean) -> Unit = { _, _, _ -> },
+  onDeleteAudioClick: (String) -> Unit = {},
   onOpenAudioPicker: () -> Unit,
   onOpenTextEditor: () -> Unit,
   onOpenStickerPicker: () -> Unit,
@@ -318,6 +324,15 @@ fun ToolSheet(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
               ) {
+                OutlinedButton(
+                  onClick = onReplaceClipClick,
+                  shape = RoundedCornerShape(8.dp),
+                  colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldPrimary)
+                ) {
+                  Icon(Icons.Default.FindReplace, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text("Replace")
+                }
                 OutlinedButton(onClick = onRotateClick, shape = RoundedCornerShape(8.dp)) {
                   Icon(Icons.Default.RotateRight, contentDescription = null, modifier = Modifier.size(16.dp))
                   Spacer(modifier = Modifier.width(4.dp))
@@ -373,19 +388,101 @@ fun ToolSheet(
             }
 
             ToolTab.AUDIO -> {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-              ) {
-                Button(
-                  onClick = onOpenAudioPicker,
-                  colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = CharcoalBackground),
-                  shape = RoundedCornerShape(8.dp),
-                  modifier = Modifier.weight(1f)
+              Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                  Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text("Add Music / SFX")
+                  Button(
+                    onClick = onOpenAudioPicker,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = CharcoalBackground),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Music / SFX / Voice")
+                  }
+                }
+
+                if (audioTracks.isNotEmpty()) {
+                  Text("Timeline Audio Tracks (${audioTracks.size})", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+
+                  val currentTrack = audioTracks.find { it.id == selectedAudioId } ?: audioTracks.first()
+                  var vol by remember(currentTrack.id) { mutableFloatStateOf(currentTrack.volume) }
+                  var muted by remember(currentTrack.id) { mutableStateOf(currentTrack.isMuted) }
+
+                  // Track selector chips
+                  Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    audioTracks.forEach { track ->
+                      val isSelected = track.id == currentTrack.id
+                      FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectAudio(track.id) },
+                        label = { Text("${track.title} (${track.category})") },
+                        colors = FilterChipDefaults.filterChipColors(
+                          selectedContainerColor = EmeraldPrimary,
+                          selectedLabelColor = CharcoalBackground
+                        )
+                      )
+                    }
+                  }
+
+                  // Active Track Controls
+                  Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = CharcoalCard,
+                    modifier = Modifier.fillMaxWidth()
+                  ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Text(currentTrack.title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                          Text("Mute", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                          Spacer(modifier = Modifier.width(4.dp))
+                          Switch(
+                            checked = muted,
+                            onCheckedChange = {
+                              muted = it
+                              onAudioVolumeChanged(currentTrack.id, vol, muted)
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = EmeraldPrimary)
+                          )
+                          Spacer(modifier = Modifier.width(8.dp))
+                          IconButton(
+                            onClick = { onDeleteAudioClick(currentTrack.id) },
+                            modifier = Modifier.size(24.dp)
+                          ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove Audio", tint = ErrorRed, modifier = Modifier.size(16.dp))
+                          }
+                        }
+                      }
+                      Spacer(modifier = Modifier.height(4.dp))
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                      ) {
+                        Text("Volume", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        Text("${(vol * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = EmeraldPrimary)
+                      }
+                      Slider(
+                        value = vol,
+                        onValueChange = {
+                          vol = it
+                          onAudioVolumeChanged(currentTrack.id, vol, muted)
+                        },
+                        valueRange = 0f..2f,
+                        colors = SliderDefaults.colors(thumbColor = EmeraldPrimary, activeTrackColor = EmeraldPrimary)
+                      )
+                    }
+                  }
                 }
               }
             }
