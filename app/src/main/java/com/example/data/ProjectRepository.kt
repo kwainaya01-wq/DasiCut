@@ -151,6 +151,17 @@ class ProjectRepository(private val context: Context) {
       cObj.put("filterIntensity", c.filterIntensity.toDouble())
       cObj.put("effect", c.effect.name)
       cObj.put("effectIntensity", c.effectIntensity.toDouble())
+
+      val fxArr = JSONArray()
+      for (fx in c.effects) {
+        val fxObj = JSONObject()
+        fxObj.put("id", fx.id)
+        fxObj.put("effect", fx.effect.name)
+        fxObj.put("intensity", fx.intensity.toDouble())
+        fxArr.put(fxObj)
+      }
+      cObj.put("effects", fxArr)
+
       cObj.put("fadeInMs", c.fadeInMs)
       cObj.put("fadeOutMs", c.fadeOutMs)
       cObj.put("isFrozen", c.isFrozen)
@@ -251,6 +262,28 @@ class ProjectRepository(private val context: Context) {
               com.example.model.VideoEffect.valueOf(cObj.optString("effect", "NONE"))
             } catch (_: Exception) { com.example.model.VideoEffect.NONE },
             effectIntensity = cObj.optDouble("effectIntensity", 0.8).toFloat(),
+            effects = run {
+              val fxList = mutableListOf<com.example.model.AppliedEffect>()
+              val fxArr = cObj.optJSONArray("effects")
+              if (fxArr != null) {
+                for (fxIdx in 0 until fxArr.length()) {
+                  val fxItem = fxArr.optJSONObject(fxIdx) ?: continue
+                  val effectType = try {
+                    com.example.model.VideoEffect.valueOf(fxItem.optString("effect", "NONE"))
+                  } catch (_: Exception) { com.example.model.VideoEffect.NONE }
+                  if (effectType != com.example.model.VideoEffect.NONE) {
+                    fxList.add(
+                      com.example.model.AppliedEffect(
+                        id = fxItem.optString("id", "fx_$fxIdx"),
+                        effect = effectType,
+                        intensity = fxItem.optDouble("intensity", 0.8).toFloat()
+                      )
+                    )
+                  }
+                }
+              }
+              fxList
+            },
             fadeInMs = cObj.optLong("fadeInMs", 0L),
             fadeOutMs = cObj.optLong("fadeOutMs", 0L),
             isFrozen = cObj.optBoolean("isFrozen", false)

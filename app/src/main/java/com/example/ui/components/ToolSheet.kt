@@ -39,6 +39,12 @@ fun ToolSheet(
   onFilterChanged: (VideoFilter, Float) -> Unit,
   onEffectChanged: (VideoEffect, Float) -> Unit,
   onTransitionChanged: (TransitionType) -> Unit,
+  onTransitionDurationChanged: (Long) -> Unit = {},
+  onAddEffect: (VideoEffect, Float) -> Unit = { _, _ -> },
+  onRemoveEffect: (String) -> Unit = {},
+  onReorderEffects: (Int, Int) -> Unit = { _, _ -> },
+  onUpdateEffectIntensity: (String, Float) -> Unit = { _, _ -> },
+  onClearEffects: () -> Unit = {},
   onRotateClick: () -> Unit,
   onFlipHClick: () -> Unit,
   onDuplicateClick: () -> Unit,
@@ -310,62 +316,394 @@ fun ToolSheet(
             }
 
             ToolTab.EFFECTS -> {
-              var currentEffect by remember(selectedClip?.id) { mutableStateOf(selectedClip?.effect ?: VideoEffect.NONE) }
-              var intensity by remember(selectedClip?.id) { mutableFloatStateOf(selectedClip?.effectIntensity ?: 0.8f) }
+              var searchQuery by remember { mutableStateOf("") }
+              var selectedCategory by remember { mutableStateOf(EffectCategory.ALL) }
+              val activeEffects = selectedClip?.activeEffects ?: emptyList()
+              var selectedActiveEffectId by remember(selectedClip?.id, activeEffects.size) {
+                mutableStateOf(activeEffects.firstOrNull()?.id)
+              }
 
-              Column {
+              // Selected effect for intensity slider
+              val currentFocusedEffect = activeEffects.find { it.id == selectedActiveEffectId } ?: activeEffects.lastOrNull()
+
+              Column(modifier = Modifier.fillMaxWidth()) {
+                // 1. Active Effects Stack Panel (if any applied)
+                if (activeEffects.isNotEmpty()) {
+                  Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = CharcoalCard,
+                    border = BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                  ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Text(
+                          text = "Active Clip Effects (${activeEffects.size})",
+                          style = MaterialTheme.typography.labelMedium,
+                          color = EmeraldPrimary,
+                          fontWeight = FontWeight.Bold
+                        )
+                        TextButton(
+                          onClick = {
+                            selectedClip?.let { onClearEffects() }
+                          },
+                          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                          Text("Clear All", style = MaterialTheme.typography.labelSmall, color = ErrorRed)
+                        }
+                      }
+
+                      // Stack layers row with reorder & delete
+                      Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        activeEffects.forEachIndexed { index, applied ->
+                          val isFocused = applied.id == currentFocusedEffect?.id
+                          Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isFocused) EmeraldPrimary.copy(alpha = 0.2f) else CharcoalSurfaceVariant,
+                            border = BorderStroke(1.dp, if (isFocused) EmeraldPrimary else CharcoalBorder),
+                            modifier = Modifier
+                              .clickable { selectedActiveEffectId = applied.id }
+                              .testTag("active_effect_${applied.effect.name}")
+                          ) {
+                            Row(
+                              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                              verticalAlignment = Alignment.CenterVertically,
+                              horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                              Text(
+                                text = "${index + 1}. ${applied.effect.displayName} (${(applied.intensity * 100).toInt()}%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isFocused) EmeraldPrimary else TextPrimary,
+                                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
+                              )
+                              // Move Up
+                              if (index > 0) {
+                                IconButton(
+                                  onClick = { onReorderEffects(index, index - 1) },
+                                  modifier = Modifier.size(16.dp)
+                                ) {
+                                  Icon(Icons.Default.ArrowBack, contentDescription = "Move Left", tint = TextMuted, modifier = Modifier.size(12.dp))
+                                }
+                              }
+                              // Move Down
+                              if (index < activeEffects.size - 1) {
+                                IconButton(
+                                  onClick = { onReorderEffects(index, index + 1) },
+                                  modifier = Modifier.size(16.dp)
+                                ) {
+                                  Icon(Icons.Default.ArrowForward, contentDescription = "Move Right", tint = TextMuted, modifier = Modifier.size(12.dp))
+                                }
+                              }
+                              // Remove
+                              IconButton(
+                                onClick = { onRemoveEffect(applied.id) },
+                                modifier = Modifier.size(16.dp)
+                              ) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove Effect", tint = ErrorRed, modifier = Modifier.size(12.dp))
+                              }
+                            }
+                          }
+                        }
+                      }
+
+                      // Focused Effect Intensity Slider
+                      if (currentFocusedEffect != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                          Text(
+                            text = "${currentFocusedEffect.effect.displayName} Intensity",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                          )
+                          Text(
+                            text = "${(currentFocusedEffect.intensity * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.Bold
+                          )
+                        }
+                        Slider(
+                          value = currentFocusedEffect.intensity,
+                          onValueChange = { newIntensity ->
+                            onUpdateEffectIntensity(currentFocusedEffect.id, newIntensity)
+                          },
+                          valueRange = 0f..1f,
+                          colors = SliderDefaults.colors(thumbColor = EmeraldPrimary, activeTrackColor = EmeraldPrimary),
+                          modifier = Modifier.testTag("effect_intensity_slider")
+                        )
+                      }
+                    }
+                  }
+                }
+
+                // 2. Search & Category Filters
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search 50+ Effects...", style = MaterialTheme.typography.labelMedium, color = TextMuted) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp)) },
+                    trailingIcon = {
+                      if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(20.dp)) {
+                          Icon(Icons.Default.Clear, contentDescription = "Clear Search", tint = TextMuted, modifier = Modifier.size(14.dp))
+                        }
+                      }
+                    },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                      focusedBorderColor = EmeraldPrimary,
+                      unfocusedBorderColor = CharcoalBorder,
+                      focusedTextColor = TextPrimary,
+                      unfocusedTextColor = TextPrimary
+                    ),
+                    modifier = Modifier.weight(1f).height(46.dp).testTag("effects_search_field")
+                  )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Category Chips Row
+                Row(
+                  modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                  horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                  EffectCategory.values().forEach { cat ->
+                    FilterChip(
+                      selected = selectedCategory == cat,
+                      onClick = { selectedCategory = cat },
+                      label = { Text(cat.displayName) },
+                      colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = EmeraldPrimary,
+                        selectedLabelColor = CharcoalBackground
+                      ),
+                      modifier = Modifier.testTag("category_chip_${cat.name}")
+                    )
+                  }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 3. Effects Library Grid / Row
+                val filteredEffects = remember(searchQuery, selectedCategory) {
+                  VideoEffect.values().filter { eff ->
+                    eff != VideoEffect.NONE &&
+                      (selectedCategory == EffectCategory.ALL || eff.category == selectedCategory) &&
+                      (searchQuery.isBlank() || eff.displayName.contains(searchQuery, ignoreCase = true) || eff.description.contains(searchQuery, ignoreCase = true))
+                  }
+                }
+
+                Text(
+                  text = "Library (${filteredEffects.size} Effects Available)",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = TextMuted,
+                  modifier = Modifier.padding(bottom = 4.dp)
+                )
+
                 Row(
                   modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                   horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                  VideoEffect.values().forEach { effect ->
-                    FilterChip(
-                      selected = (currentEffect == effect),
-                      onClick = {
-                        currentEffect = effect
-                        onEffectChanged(effect, intensity)
-                      },
-                      label = { Text(effect.displayName) },
-                      colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = EmeraldPrimary,
-                        selectedLabelColor = CharcoalBackground
-                      )
-                    )
+                  filteredEffects.forEach { effect ->
+                    val isApplied = activeEffects.any { it.effect == effect }
+                    Surface(
+                      shape = RoundedCornerShape(8.dp),
+                      color = if (isApplied) EmeraldDark.copy(alpha = 0.35f) else CharcoalCard,
+                      border = BorderStroke(1.dp, if (isApplied) EmeraldPrimary else CharcoalBorder),
+                      modifier = Modifier
+                        .width(135.dp)
+                        .clickable {
+                          if (isApplied) {
+                            val existingId = activeEffects.find { it.effect == effect }?.id
+                            if (existingId != null) selectedActiveEffectId = existingId
+                          } else {
+                            onAddEffect(effect, 0.8f)
+                          }
+                        }
+                        .testTag("effect_card_${effect.name}")
+                    ) {
+                      Column(modifier = Modifier.padding(8.dp)) {
+                        Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                          verticalAlignment = Alignment.CenterVertically
+                        ) {
+                          Text(
+                            text = effect.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isApplied) EmeraldPrimary else TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                          )
+                          if (effect.isPro) {
+                            Surface(
+                              shape = RoundedCornerShape(4.dp),
+                              color = GoldAccent.copy(alpha = 0.2f),
+                              border = BorderStroke(1.dp, GoldAccent)
+                            ) {
+                              Text(
+                                text = "PRO",
+                                color = GoldAccent,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                              )
+                            }
+                          }
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                          text = effect.description,
+                          style = MaterialTheme.typography.labelSmall,
+                          color = TextMuted,
+                          fontSize = 9.sp,
+                          maxLines = 2,
+                          lineHeight = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                          Icon(
+                            imageVector = if (isApplied) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = null,
+                            tint = if (isApplied) EmeraldPrimary else TextSecondary,
+                            modifier = Modifier.size(12.dp)
+                          )
+                          Spacer(modifier = Modifier.width(3.dp))
+                          Text(
+                            text = if (isApplied) "Applied" else "Add Effect",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isApplied) EmeraldPrimary else TextSecondary,
+                            fontSize = 9.sp
+                          )
+                        }
+                      }
+                    }
                   }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                  Text("Effect Intensity", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                  Text("${(intensity * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = EmeraldPrimary)
-                }
-                Slider(
-                  value = intensity,
-                  onValueChange = {
-                    intensity = it
-                    onEffectChanged(currentEffect, intensity)
-                  },
-                  valueRange = 0f..1f,
-                  colors = SliderDefaults.colors(thumbColor = EmeraldPrimary, activeTrackColor = EmeraldPrimary)
-                )
               }
             }
 
             ToolTab.TRANSITIONS -> {
               val currentTrans = selectedClip?.transitionToNext ?: TransitionType.NONE
-              Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-              ) {
-                TransitionType.values().forEach { t ->
-                  FilterChip(
-                    selected = (currentTrans == t),
-                    onClick = { onTransitionChanged(t) },
-                    label = { Text(t.displayName) },
-                    colors = FilterChipDefaults.filterChipColors(
-                      selectedContainerColor = EmeraldPrimary,
-                      selectedLabelColor = CharcoalBackground
-                    )
+              var durationMs by remember(selectedClip?.id, selectedClip?.transitionDurationMs) {
+                mutableLongStateOf(selectedClip?.transitionDurationMs ?: 500L)
+              }
+
+              Column(modifier = Modifier.fillMaxWidth()) {
+                // Header with current active transition and Duration slider (0.2s to 3.0s)
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = "Active Transition: ${currentTrans.displayName}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (currentTrans != TransitionType.NONE) EmeraldPrimary else TextSecondary,
+                    fontWeight = FontWeight.SemiBold
                   )
+                  if (currentTrans != TransitionType.NONE) {
+                    TextButton(
+                      onClick = { onTransitionChanged(TransitionType.NONE) },
+                      contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                      Text("Remove / None", style = MaterialTheme.typography.labelSmall, color = ErrorRed)
+                    }
+                  }
+                }
+
+                if (currentTrans != TransitionType.NONE) {
+                  Spacer(modifier = Modifier.height(4.dp))
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text("Transition Duration", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    Text(
+                      text = "${(durationMs / 1000f).formatOneDecimal()}s",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = EmeraldPrimary,
+                      fontWeight = FontWeight.Bold
+                    )
+                  }
+                  Slider(
+                    value = durationMs.toFloat(),
+                    onValueChange = {
+                      durationMs = it.toLong()
+                      onTransitionDurationChanged(durationMs)
+                    },
+                    valueRange = 200f..3000f,
+                    steps = 27, // 0.1s increments between 0.2s and 3.0s
+                    colors = SliderDefaults.colors(thumbColor = EmeraldPrimary, activeTrackColor = EmeraldPrimary),
+                    modifier = Modifier.testTag("transition_duration_slider")
+                  )
+
+                  // Quick duration presets
+                  Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                  ) {
+                    listOf(300L, 500L, 800L, 1000L, 1500L, 2000L).forEach { presetMs ->
+                      AssistChip(
+                        onClick = {
+                          durationMs = presetMs
+                          onTransitionDurationChanged(presetMs)
+                        },
+                        label = { Text("${(presetMs / 1000f).formatOneDecimal()}s", fontSize = 10.sp) },
+                        colors = AssistChipDefaults.assistChipColors(
+                          labelColor = if (durationMs == presetMs) EmeraldPrimary else TextSecondary
+                        )
+                      )
+                    }
+                  }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                  text = "Choose from 20 Transitions (${TransitionType.primaryTransitions.size} Total)",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = TextMuted,
+                  modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                // 20 Transitions Chips / Cards Row
+                Row(
+                  modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                  TransitionType.primaryTransitions.forEach { t ->
+                    val isSelected = (currentTrans == t)
+                    FilterChip(
+                      selected = isSelected,
+                      onClick = { onTransitionChanged(t) },
+                      label = { Text(t.displayName) },
+                      leadingIcon = {
+                        Icon(
+                          imageVector = if (t == TransitionType.NONE) Icons.Default.Block else Icons.Default.Transform,
+                          contentDescription = null,
+                          modifier = Modifier.size(14.dp)
+                        )
+                      },
+                      colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = EmeraldPrimary,
+                        selectedLabelColor = CharcoalBackground
+                      ),
+                      modifier = Modifier.testTag("transition_chip_${t.name}")
+                    )
+                  }
                 }
               }
             }

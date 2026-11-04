@@ -114,30 +114,48 @@ object NativeVideoExporter {
           try {
             canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), clearPaint)
 
-            // 1. Locate active clip
+            // 1. Locate active clip and next clip for transitions
             var clipStartMs = 0L
-            var activeClip = project.clips.firstOrNull()
+            var activeClip: VideoClip? = null
+            var activeClipIndex = -1
             var clipOffsetMs = 0L
 
-            for (clip in project.clips) {
+            for (idx in project.clips.indices) {
+              val clip = project.clips[idx]
               val clipDur = clip.effectiveDurationMs
               if (currentTimeMs in clipStartMs until (clipStartMs + clipDur)) {
                 activeClip = clip
+                activeClipIndex = idx
                 clipOffsetMs = currentTimeMs - clipStartMs
                 break
               }
               clipStartMs += clipDur
             }
 
+            if (activeClip == null && project.clips.isNotEmpty()) {
+              activeClip = project.clips.last()
+              activeClipIndex = project.clips.size - 1
+              clipOffsetMs = activeClip.effectiveDurationMs
+            }
+
             if (activeClip != null) {
-              // Draw clip visual
+              val nextClip = if (activeClipIndex in 0 until (project.clips.size - 1)) project.clips[activeClipIndex + 1] else null
+              val transDur = activeClip.transitionDurationMs.coerceAtLeast(100L)
+              val transStartMs = activeClip.effectiveDurationMs - transDur
+              val transProgress = if (activeClip.transitionToNext != TransitionType.NONE && nextClip != null && clipOffsetMs >= transStartMs) {
+                ((clipOffsetMs - transStartMs).toFloat() / transDur).coerceIn(0f, 1f)
+              } else 0f
+
+              // Draw clip visual with real filters, 50+ effects stack, and 20 transitions
               drawClipToCanvas(
                 canvas = canvas,
                 clip = activeClip,
                 clipOffsetMs = clipOffsetMs,
                 targetWidth = targetWidth,
                 targetHeight = targetHeight,
-                frameIndex = frameIndex
+                frameIndex = frameIndex,
+                nextClip = nextClip,
+                transitionProgress = transProgress
               )
             }
 
@@ -291,7 +309,9 @@ object NativeVideoExporter {
     clipOffsetMs: Long,
     targetWidth: Int,
     targetHeight: Int,
-    frameIndex: Int
+    frameIndex: Int,
+    nextClip: VideoClip? = null,
+    transitionProgress: Float = 0f
   ) {
     val filterColorFilter = ColorFilterMatrixHelper.getAndroidGraphicsColorFilter(clip.filter, clip.filterIntensity)
     val clipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -360,96 +380,26 @@ object NativeVideoExporter {
       canvas.drawPath(path, hillPaint)
     }
 
-    // Apply Real Visual Effects scaled by effectIntensity
-    applyEffectToCanvas(canvas, clip.effect, clip.effectIntensity, targetWidth, targetHeight, frameIndex)
-  }
+    // Apply 50+ Real Visual Effects across multi-effect stack
+    VideoEffectsAndTransitionsRenderer.renderEffectsOnAndroidCanvas(
+      canvas = canvas,
+      effects = clip.activeEffects,
+      width = targetWidth,
+      height = targetHeight,
+      frameIndex = frameIndex
+    )
 
-  private fun applyEffectToCanvas(
-    canvas: Canvas,
-    effect: VideoEffect,
-    intensity: Float,
-    width: Int,
-    height: Int,
-    frameIndex: Int
-  ) {
-    if (effect == VideoEffect.NONE || intensity <= 0.01f) return
-
-    when (effect) {
-      VideoEffect.GLITCH -> {
-        val glitchPaint = Paint().apply {
-          color = android.graphics.Color.argb((180 * intensity).toInt(), 0, 229, 255)
-        }
-        val sliceCount = (6 * intensity).toInt().coerceAtLeast(1)
-        val random = Random(frameIndex)
-        for (i in 0 until sliceCount) {
-          val y = random.nextInt(height).toFloat()
-          val sliceH = (12f * intensity).coerceAtLeast(4f)
-          val xShift = (random.nextInt(40) - 20) * intensity
-          canvas.drawRect(xShift, y, width + xShift, y + sliceH, glitchPaint)
-        }
-      }
-
-      VideoEffect.RGB_SPLIT -> {
-        val redPaint = Paint().apply {
-          color = android.graphics.Color.argb((70 * intensity).toInt(), 255, 0, 0)
-        }
-        val cyanPaint = Paint().apply {
-          color = android.graphics.Color.argb((70 * intensity).toInt(), 0, 255, 255)
-        }
-        val offset = 12f * intensity
-        canvas.drawRect(-offset, 0f, width - offset, height.toFloat(), redPaint)
-        canvas.drawRect(offset, 0f, width + offset, height.toFloat(), cyanPaint)
-      }
-
-      VideoEffect.FILM_GRAIN -> {
-        val grainPaint = Paint().apply {
-          color = android.graphics.Color.argb((120 * intensity).toInt(), 255, 255, 255)
-        }
-        val count = (80 * intensity).toInt().coerceAtLeast(10)
-        val rand = Random(frameIndex * 13)
-        for (i in 0 until count) {
-          val gx = rand.nextInt(width).toFloat()
-          val gy = rand.nextInt(height).toFloat()
-          canvas.drawCircle(gx, gy, 1.8f, grainPaint)
-        }
-      }
-
-      VideoEffect.VHS_SCANLINES -> {
-        val linePaint = Paint().apply {
-          color = android.graphics.Color.argb((80 * intensity).toInt(), 0, 0, 0)
-          strokeWidth = 2f
-        }
-        var y = (frameIndex % 8).toFloat()
-        while (y < height) {
-          canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
-          y += 8f
-        }
-      }
-
-      VideoEffect.VIGNETTE -> {
-        val shader = RadialGradient(
-          width / 2f, height / 2f, width * 0.7f,
-          intArrayOf(android.graphics.Color.TRANSPARENT, android.graphics.Color.argb((220 * intensity).toInt(), 0, 0, 0)),
-          floatArrayOf(0.4f, 1.0f),
-          Shader.TileMode.CLAMP
-        )
-        val vignettePaint = Paint().apply { setShader(shader) }
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), vignettePaint)
-      }
-
-      VideoEffect.DREAMY_BLUR -> {
-        val glowPaint = Paint().apply {
-          color = android.graphics.Color.argb((60 * intensity).toInt(), 255, 255, 255)
-        }
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), glowPaint)
-      }
-
-      VideoEffect.MOTION_SHAKE -> {
-        val shake = (sin(frameIndex.toDouble() * 1.5) * 12.0 * intensity).toFloat()
-        canvas.translate(shake, shake * 0.5f)
-      }
-
-      VideoEffect.NONE -> {}
+    // Apply 20 Professional Video Transitions
+    if (transitionProgress > 0f && clip.transitionToNext != TransitionType.NONE) {
+      VideoEffectsAndTransitionsRenderer.renderTransitionOnAndroidCanvas(
+        canvas = canvas,
+        transition = clip.transitionToNext,
+        progress = transitionProgress,
+        nextClip = nextClip,
+        width = targetWidth,
+        height = targetHeight,
+        frameIndex = frameIndex
+      )
     }
   }
 

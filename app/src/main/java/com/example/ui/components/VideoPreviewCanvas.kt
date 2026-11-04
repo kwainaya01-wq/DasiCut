@@ -227,13 +227,26 @@ fun VideoPreviewCanvas(
           )
         }
 
-        // 2. Main Canvas for scenic demo frame + real-time filters & effects
+        // Calculate transition progress to next clip
+        val currentClipIdx = project.clips.indexOfFirst { it.id == activeClip?.id }
+        val nextClip = if (currentClipIdx in 0 until (project.clips.size - 1)) project.clips[currentClipIdx + 1] else null
+        val transDuration = activeClip?.transitionDurationMs ?: 500L
+        val transitionProgress = if (activeClip != null && activeClip.transitionToNext != TransitionType.NONE && nextClip != null) {
+          val transStartMs = activeClip.effectiveDurationMs - transDuration
+          if (clipProgressMs >= transStartMs) {
+            ((clipProgressMs - transStartMs).toFloat() / transDuration.coerceAtLeast(100L)).coerceIn(0f, 1f)
+          } else 0f
+        } else 0f
+
+        // 2. Main Canvas for scenic demo frame + real-time filters & 50+ effects & 20 transitions
         Canvas(modifier = Modifier.fillMaxSize()) {
           drawVideoOverlaysAndDemoFrame(
             clip = activeClip,
             clipProgressMs = clipProgressMs,
             animPhase = animPhase,
-            isRealMediaActive = hasRealVideo
+            isRealMediaActive = hasRealVideo,
+            nextClip = nextClip,
+            transitionProgress = transitionProgress
           )
         }
 
@@ -295,17 +308,17 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Filter / Effect active badge in corner
-        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.effect != VideoEffect.NONE)) {
+        // Filter / Effect / Transition active badge in corner
+        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.activeEffects.isNotEmpty() || transitionProgress > 0f)) {
           Surface(
             shape = RoundedCornerShape(4.dp),
-            color = Color(0xAA000000),
+            color = Color(0xCC000000),
             modifier = Modifier
               .align(Alignment.TopStart)
               .padding(6.dp)
           ) {
             Row(
-              modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
               horizontalArrangement = Arrangement.spacedBy(4.dp),
               verticalAlignment = Alignment.CenterVertically
             ) {
@@ -316,11 +329,23 @@ fun VideoPreviewCanvas(
                   color = GoldAccent
                 )
               }
-              if (activeClip.effect != VideoEffect.NONE) {
+              if (activeClip.activeEffects.isNotEmpty()) {
+                val fxSummary = if (activeClip.activeEffects.size == 1) {
+                  "• ${activeClip.activeEffects.first().effect.displayName}"
+                } else {
+                  "• ${activeClip.activeEffects.first().effect.displayName} (+${activeClip.activeEffects.size - 1})"
+                }
                 Text(
-                  text = "• ${activeClip.effect.displayName}",
+                  text = fxSummary,
                   style = MaterialTheme.typography.labelSmall,
                   color = EmeraldPrimary
+                )
+              }
+              if (transitionProgress > 0f && activeClip.transitionToNext != TransitionType.NONE) {
+                Text(
+                  text = "⚡ ${activeClip.transitionToNext.displayName}",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = Color(0xFF00E5FF)
                 )
               }
             }
@@ -417,7 +442,9 @@ private fun DrawScope.drawVideoOverlaysAndDemoFrame(
   clip: VideoClip?,
   clipProgressMs: Long,
   animPhase: Float,
-  isRealMediaActive: Boolean
+  isRealMediaActive: Boolean,
+  nextClip: VideoClip? = null,
+  transitionProgress: Float = 0f
 ) {
   if (clip == null) {
     drawRect(Color.DarkGray)
@@ -491,7 +518,7 @@ private fun DrawScope.drawVideoOverlaysAndDemoFrame(
     drawPath(fgPath, color = Color(0x88000000))
   }
 
-  // --- Real Filter Processing with intensity scaling ---
+  // 2. Real Filter Processing with intensity scaling
   val intensity = clip.filterIntensity.coerceIn(0f, 1f)
   if (clip.filter != VideoFilter.ORIGINAL && intensity > 0.01f) {
     when (clip.filter) {
@@ -536,97 +563,22 @@ private fun DrawScope.drawVideoOverlaysAndDemoFrame(
     }
   }
 
-  // --- Real Effects Processing with intensity scaling ---
-  val effIntensity = clip.effectIntensity.coerceIn(0f, 1f)
-  if (clip.effect != VideoEffect.NONE && effIntensity > 0.01f) {
-    when (clip.effect) {
-      VideoEffect.NONE -> {}
-      VideoEffect.GLITCH -> {
-        val glitchLineY = (animPhase * size.height) % size.height
-        val sliceH = (14f * effIntensity).coerceAtLeast(3f)
-        drawRect(
-          color = Color(0xFF00E5FF).copy(alpha = 0.75f * effIntensity),
-          topLeft = Offset(0f, glitchLineY),
-          size = Size(size.width, sliceH),
-          blendMode = BlendMode.Screen
-        )
-        drawRect(
-          color = Color(0xFFFF0055).copy(alpha = 0.75f * effIntensity),
-          topLeft = Offset(10f * effIntensity, (glitchLineY + 24f) % size.height),
-          size = Size(size.width - 20f, sliceH * 0.7f),
-          blendMode = BlendMode.Difference
-        )
-      }
-      VideoEffect.RGB_SPLIT -> {
-        val splitOffset = 8f * effIntensity
-        drawRect(
-          color = Color(0xFFFF0000).copy(alpha = 0.35f * effIntensity),
-          topLeft = Offset(-splitOffset, 0f),
-          size = size,
-          blendMode = BlendMode.Screen
-        )
-        drawRect(
-          color = Color(0xFF00FFFF).copy(alpha = 0.35f * effIntensity),
-          topLeft = Offset(splitOffset, 0f),
-          size = size,
-          blendMode = BlendMode.Screen
-        )
-      }
-      VideoEffect.FILM_GRAIN -> {
-        val count = (60 * effIntensity).toInt().coerceAtLeast(10)
-        val random = Random((animPhase * 100).toInt())
-        for (i in 0..count) {
-          val rx = random.nextFloat() * size.width
-          val ry = random.nextFloat() * size.height
-          drawCircle(
-            color = Color(0xFFFFFFFF).copy(alpha = 0.6f * effIntensity),
-            radius = 1.6f,
-            center = Offset(rx, ry)
-          )
-        }
-      }
-      VideoEffect.VHS_SCANLINES -> {
-        val strokeW = (2.5f * effIntensity).coerceAtLeast(1f)
-        var y = 0f
-        while (y < size.height) {
-          drawLine(
-            color = Color(0xFF000000).copy(alpha = 0.35f * effIntensity),
-            start = Offset(0f, y),
-            end = Offset(size.width, y),
-            strokeWidth = strokeW
-          )
-          y += 8f
-        }
-      }
-      VideoEffect.VIGNETTE -> {
-        drawRect(
-          brush = Brush.radialGradient(
-            colors = listOf(Color.Transparent, Color(0xFF000000).copy(alpha = 0.95f * effIntensity)),
-            center = Offset(size.width * 0.5f, size.height * 0.5f),
-            radius = size.width * (0.75f - 0.2f * effIntensity)
-          )
-        )
-      }
-      VideoEffect.DREAMY_BLUR -> {
-        drawRect(
-          brush = Brush.radialGradient(
-            colors = listOf(Color(0xFFFFFFFF).copy(alpha = 0.5f * effIntensity), Color.Transparent),
-            center = Offset(size.width * 0.5f, size.height * 0.5f),
-            radius = size.width * 0.6f
-          ),
-          blendMode = BlendMode.Plus
-        )
-      }
-      VideoEffect.MOTION_SHAKE -> {
-        val shakeOffset = (if (animPhase > 0.5f) 6f else -6f) * effIntensity
-        drawRect(
-          color = Color(0xFFFFFFFF).copy(alpha = 0.25f * effIntensity),
-          topLeft = Offset(shakeOffset, shakeOffset),
-          size = size,
-          blendMode = BlendMode.Overlay
-        )
-      }
-    }
+  // 3. Multi-Effect Stack Processing (renders all 50+ real effects)
+  com.example.media.VideoEffectsAndTransitionsRenderer.renderEffectsOnCompose(
+    drawScope = this,
+    effects = clip.activeEffects,
+    animPhase = animPhase
+  )
+
+  // 4. Professional Video Transitions (20 transitions)
+  if (transitionProgress > 0f && clip.transitionToNext != TransitionType.NONE) {
+    com.example.media.VideoEffectsAndTransitionsRenderer.renderTransitionCompose(
+      drawScope = this,
+      transition = clip.transitionToNext,
+      progress = transitionProgress,
+      nextClip = nextClip,
+      animPhase = animPhase
+    )
   }
 
   // Freeze frame badge indicator

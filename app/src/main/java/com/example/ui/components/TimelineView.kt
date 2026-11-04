@@ -266,15 +266,20 @@ fun TimelineView(
                   )
                 }
 
-                // Speed / Filter indicator badge
-                if (clip.speed != 1.0f || clip.filter != VideoFilter.ORIGINAL) {
+                // Speed / Filter / Effect indicator badge
+                if (clip.speed != 1.0f || clip.filter != VideoFilter.ORIGINAL || clip.activeEffects.isNotEmpty()) {
                   Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0x99000000),
+                    color = Color(0xAA000000),
                     modifier = Modifier.align(Alignment.TopEnd).padding(end = if (isSelected) 16.dp else 2.dp)
                   ) {
+                    val badgeText = when {
+                      clip.activeEffects.isNotEmpty() -> "Fx ${clip.activeEffects.size}"
+                      clip.filter != VideoFilter.ORIGINAL -> "Filter"
+                      else -> "${clip.speed}x"
+                    }
                     Text(
-                      text = if (clip.speed != 1.0f) "${clip.speed}x" else "Fx",
+                      text = badgeText,
                       color = GoldAccent,
                       fontSize = 8.sp,
                       modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)

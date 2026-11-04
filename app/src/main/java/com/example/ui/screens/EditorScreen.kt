@@ -206,6 +206,24 @@ fun EditorScreen(
         onTransitionChanged = { trans ->
           selectedClipId?.let { viewModel.updateClipTransition(it, trans) }
         },
+        onTransitionDurationChanged = { durMs ->
+          selectedClipId?.let { viewModel.updateTransitionDuration(it, durMs) }
+        },
+        onAddEffect = { effect, intensity ->
+          selectedClipId?.let { viewModel.addEffectToClip(it, effect, intensity) }
+        },
+        onRemoveEffect = { effectId ->
+          selectedClipId?.let { viewModel.removeEffectFromClip(it, effectId) }
+        },
+        onReorderEffects = { from, to ->
+          selectedClipId?.let { viewModel.reorderClipEffects(it, from, to) }
+        },
+        onUpdateEffectIntensity = { effectId, intensity ->
+          selectedClipId?.let { viewModel.updateEffectIntensity(it, effectId, intensity) }
+        },
+        onClearEffects = {
+          selectedClipId?.let { viewModel.clearClipEffects(it) }
+        },
         onRotateClick = {
           selectedClipId?.let { viewModel.rotateClip(it) }
         },

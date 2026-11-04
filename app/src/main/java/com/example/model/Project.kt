@@ -16,13 +16,59 @@ enum class AspectRatio(
 
 enum class TransitionType(val displayName: String, val iconResName: String) {
   NONE("None", "none"),
-  DISSOLVE("Dissolve", "dissolve"),
-  FADE_BLACK("Fade Black", "fade_black"),
+  FADE_IN("Fade In", "fade_in"),
+  FADE_OUT("Fade Out", "fade_out"),
+  CROSS_DISSOLVE("Cross Dissolve", "cross_dissolve"),
+  BLACK_FADE("Black Fade", "black_fade"),
+  WHITE_FADE("White Fade", "white_fade"),
   ZOOM_IN("Zoom In", "zoom_in"),
-  GLITCH("Glitch", "glitch"),
-  SLIDE_LEFT("Slide", "slide_left"),
-  FLASH("White Flash", "flash"),
-  WHIP_PAN("Whip Pan", "whip_pan")
+  ZOOM_OUT("Zoom Out", "zoom_out"),
+  SLIDE_LEFT("Slide Left", "slide_left"),
+  SLIDE_RIGHT("Slide Right", "slide_right"),
+  SLIDE_UP("Slide Up", "slide_up"),
+  SLIDE_DOWN("Slide Down", "slide_down"),
+  SWIPE_LEFT("Swipe Left", "swipe_left"),
+  SWIPE_RIGHT("Swipe Right", "swipe_right"),
+  CIRCLE_REVEAL("Circle Reveal", "circle_reveal"),
+  BLUR_TRANSITION("Blur Transition", "blur_transition"),
+  SPIN_TRANSITION("Spin Transition", "spin_transition"),
+  FLASH_TRANSITION("Flash Transition", "flash_transition"),
+  GLITCH_TRANSITION("Glitch Transition", "glitch_transition"),
+  WIPE_TRANSITION("Wipe Transition", "wipe_transition"),
+  RGB_SPLIT_TRANSITION("RGB Split Transition", "rgb_split_transition"),
+
+  // Backward-compatibility aliases
+  DISSOLVE("Cross Dissolve", "cross_dissolve"),
+  FADE_BLACK("Black Fade", "black_fade"),
+  FLASH("Flash Transition", "flash_transition"),
+  GLITCH("Glitch Transition", "glitch_transition"),
+  WHIP_PAN("Spin Transition", "spin_transition");
+
+  companion object {
+    val primaryTransitions: List<TransitionType> = listOf(
+      NONE,
+      FADE_IN,
+      FADE_OUT,
+      CROSS_DISSOLVE,
+      BLACK_FADE,
+      WHITE_FADE,
+      ZOOM_IN,
+      ZOOM_OUT,
+      SLIDE_LEFT,
+      SLIDE_RIGHT,
+      SLIDE_UP,
+      SLIDE_DOWN,
+      SWIPE_LEFT,
+      SWIPE_RIGHT,
+      CIRCLE_REVEAL,
+      BLUR_TRANSITION,
+      SPIN_TRANSITION,
+      FLASH_TRANSITION,
+      GLITCH_TRANSITION,
+      WIPE_TRANSITION,
+      RGB_SPLIT_TRANSITION
+    )
+  }
 }
 
 enum class VideoFilter(val displayName: String, val description: String) {
@@ -38,16 +84,106 @@ enum class VideoFilter(val displayName: String, val description: String) {
   MONOCHROME("Film B&W", "Silky analog black & white film")
 }
 
-enum class VideoEffect(val displayName: String, val description: String) {
-  NONE("None", "No overlay effect"),
-  GLITCH("Digital Glitch", "Cyber displacement and scan jumps"),
-  RGB_SPLIT("RGB Split", "Prismatic chromatic fringe"),
-  FILM_GRAIN("Film Grain", "Authentic 35mm motion dust"),
-  VHS_SCANLINES("VHS Retro", "Vintage tape tracking lines"),
-  VIGNETTE("Dark Vignette", "Soft dramatic corner falloff"),
-  DREAMY_BLUR("Dream Bloom", "Glowing ethereal highlight diffusion"),
-  MOTION_SHAKE("Beat Shake", "Dynamic rhythmic camera pulse")
+enum class EffectCategory(val displayName: String) {
+  ALL("All"),
+  CINEMATIC("Cinematic"),
+  GLITCH("Glitch"),
+  LIGHT("Light"),
+  RETRO("Retro"),
+  BLUR("Blur"),
+  CREATIVE("Creative"),
+  COLOR("Color")
 }
+
+enum class VideoEffect(
+  val displayName: String,
+  val description: String,
+  val category: EffectCategory = EffectCategory.CINEMATIC,
+  val isPro: Boolean = false
+) {
+  NONE("None", "No overlay effect", EffectCategory.ALL, false),
+
+  // Cinematic (8 effects)
+  CINEMATIC_GLOW("Cinematic Glow", "Soft highlight bloom and dreamy warmth", EffectCategory.CINEMATIC, false),
+  FILM_LOOK("Film Look", "Deep analog shadows and organic film response", EffectCategory.CINEMATIC, false),
+  TEAL_AND_ORANGE("Teal & Orange", "Hollywood blockbuster dual-tone color grading", EffectCategory.CINEMATIC, true),
+  MOVIE_GRAIN("Movie Grain", "Authentic 35mm motion dust and silver halide grain", EffectCategory.CINEMATIC, false),
+  SOFT_FOCUS("Soft Focus", "Delicate portrait diffusion and skin smoothing", EffectCategory.CINEMATIC, false),
+  CINEMATIC_BLUR("Cinematic Blur", "Anamorphic shallow depth-of-field edge blur", EffectCategory.CINEMATIC, true),
+  VIGNETTE("Dark Vignette", "Soft dramatic corner exposure falloff", EffectCategory.CINEMATIC, false),
+  BLEACH_BYPASS("Bleach Bypass", "High-contrast silver retention desaturated film look", EffectCategory.CINEMATIC, true),
+
+  // Glitch (8 effects)
+  GLITCH("Digital Glitch", "Cyber displacement and horizontal scan jumps", EffectCategory.GLITCH, false),
+  RGB_SPLIT("RGB Split", "Prismatic chromatic fringe and channel divergence", EffectCategory.GLITCH, false),
+  VHS_GLITCH("VHS Glitch", "Magnetic tape distortion and horizontal tear", EffectCategory.GLITCH, false),
+  SIGNAL_DISTORTION("Signal Distortion", "Analog TV antenna static and RF interference", EffectCategory.GLITCH, true),
+  PIXEL_GLITCH("Pixel Glitch", "Blocky 8-bit digital pixel displacement", EffectCategory.GLITCH, false),
+  CHROMATIC_ABERRATION("Chromatic Aberration", "Radial spectral color fringe at perimeter", EffectCategory.GLITCH, true),
+  DATA_MOSH("Data Mosh", "Compression artifact frame bleed and pixel smear", EffectCategory.GLITCH, true),
+  SCANLINE_WAVE("Scanline Wave", "Rolling CRT electron beam bands and phosphor ripple", EffectCategory.GLITCH, false),
+
+  // Light (8 effects)
+  LENS_FLARE("Lens Flare", "Golden optical aperture flare and rings", EffectCategory.LIGHT, false),
+  LIGHT_LEAK("Light Leak", "Warm analog vintage camera light leak", EffectCategory.LIGHT, false),
+  FLASH("Flash", "High-energy rhythmic strobe pulse and blinding bursts", EffectCategory.LIGHT, false),
+  GLOW("Glow", "Ethereal luminous halo around highlights", EffectCategory.LIGHT, false),
+  NEON_GLOW("Neon Glow", "Vibrant cyber pink and electric blue aura", EffectCategory.LIGHT, true),
+  GOLDEN_LIGHT("Golden Light", "Rich sunset ray infusion and radiant warm wash", EffectCategory.LIGHT, false),
+  PRISM_RAINBOW("Prism Rainbow", "Refracted crystal spectrum scatter and rainbow shards", EffectCategory.LIGHT, true),
+  SUN_RAYS("Sun Rays", "Volumetric crepuscular light beams streaming from above", EffectCategory.LIGHT, true),
+
+  // Retro (8 effects)
+  VINTAGE("Vintage", "1970s warm fade, yellowed paper and gentle vignette", EffectCategory.RETRO, false),
+  VHS_SCANLINES("VHS Retro", "Vintage tape tracking lines and phosphor buzz", EffectCategory.RETRO, false),
+  RETRO_FILM("Retro Film", "Aged 16mm celluloid with border burn and flicker", EffectCategory.RETRO, false),
+  LOOK_90S("90s Look", "Cool contrasty home camcorder aesthetics", EffectCategory.RETRO, false),
+  OLD_CAMERA("Old Camera", "Sepia-tinged daguerreotype texture and historic patina", EffectCategory.RETRO, true),
+  FILM_BURN("Film Burn", "Organic orange celluloid burn and edge heat flare", EffectCategory.RETRO, true),
+  SILENT_8MM("8mm Silent", "Flickering monochrome classic reel with projector shudder", EffectCategory.RETRO, true),
+  DISCO_70S("70s Disco", "Psychedelic saturated warmth and star filter glints", EffectCategory.RETRO, true),
+
+  // Blur (7 effects)
+  GAUSSIAN_BLUR("Gaussian Blur", "Smooth multi-directional atmospheric softness", EffectCategory.BLUR, false),
+  MOTION_BLUR("Motion Blur", "High-speed directional velocity streaks", EffectCategory.BLUR, false),
+  RADIAL_BLUR("Radial Blur", "Rotational vortex blur emanating from center", EffectCategory.BLUR, true),
+  ZOOM_BLUR("Zoom Blur", "Explosive focal zoom blur with speed trails", EffectCategory.BLUR, true),
+  BACKGROUND_BLUR("Background Blur", "Dramatic bokeh vignette blur keeping center crisp", EffectCategory.BLUR, false),
+  TILT_SHIFT("Tilt Shift", "Miniature diorama horizontal focus slice", EffectCategory.BLUR, true),
+  DREAMY_BLUR("Dream Bloom", "Glowing ethereal highlight diffusion and bloom", EffectCategory.BLUR, false),
+
+  // Creative (8 effects)
+  BLACK_AND_WHITE("Black & White", "Silky monochrome fine art tone with deep blacks", EffectCategory.CREATIVE, false),
+  NEGATIVE("Negative", "Inverted color photographic film negative", EffectCategory.CREATIVE, false),
+  SKETCH("Sketch", "Pencil cross-hatch contour and charcoal outline", EffectCategory.CREATIVE, true),
+  CARTOON_STYLE("Cartoon Style", "Posterized pop-art comic illustration and ink edges", EffectCategory.CREATIVE, true),
+  MIRROR("Mirror", "Bilateral symmetrical reflective mirror illusion", EffectCategory.CREATIVE, false),
+  KALEIDOSCOPE("Kaleidoscope", "Geometric multifaceted crystal symmetry pattern", EffectCategory.CREATIVE, true),
+  THERMAL_VISION("Thermal Vision", "Infrared heat-map false color spectrum", EffectCategory.CREATIVE, true),
+  HALFTONE("Halftone", "Vintage printed newspaper dot matrix screen", EffectCategory.CREATIVE, true),
+
+  // Color (10 effects)
+  WARM("Warm", "Cozy golden sun and amber boost", EffectCategory.COLOR, false),
+  COOL("Cool", "Refreshing arctic cyan and blue tones", EffectCategory.COLOR, false),
+  FADE("Fade", "Lifted matte blacks and pastel mist", EffectCategory.COLOR, false),
+  SATURATION_BOOST("Saturation Boost", "Vivid explosive color pop and deep vibrance", EffectCategory.COLOR, false),
+  HIGH_CONTRAST("High Contrast", "Punchy deep shadows and bright punchy highlights", EffectCategory.COLOR, false),
+  SEPIA("Sepia", "Nostalgic antique brown monochrome wash", EffectCategory.COLOR, false),
+  NIGHT_VISION("Night Vision", "Military phosphor green tactical surveillance", EffectCategory.COLOR, true),
+  HDR_LOOK("HDR Look", "Ultra dynamic clarity, local contrast and shadow recovery", EffectCategory.COLOR, true),
+  SUNSET_AMBER("Sunset Amber", "Lush crimson evening glow and dusk warmth", EffectCategory.COLOR, false),
+  EMERALD_VIVID("Vivid Emerald", "Signature DesiCut rich emerald jewel tint", EffectCategory.COLOR, false),
+
+  // Extra / Aliases
+  FILM_GRAIN("Film Grain", "Authentic 35mm motion dust and grain", EffectCategory.CINEMATIC, false),
+  MOTION_SHAKE("Beat Shake", "Dynamic rhythmic camera pulse and vibration", EffectCategory.CREATIVE, false)
+}
+
+data class AppliedEffect(
+  val id: String = java.util.UUID.randomUUID().toString().take(6),
+  val effect: VideoEffect,
+  val intensity: Float = 0.8f
+)
 
 enum class TextAnimation(val displayName: String) {
   NONE("None"),
@@ -80,11 +216,19 @@ data class VideoClip(
   val filterIntensity: Float = 1.0f,
   val effect: VideoEffect = VideoEffect.NONE,
   val effectIntensity: Float = 0.8f,
+  val effects: List<AppliedEffect> = emptyList(),
   val fadeInMs: Long = 0L,
   val fadeOutMs: Long = 0L,
   val isFrozen: Boolean = false,
   val captionPrompt: String? = null
 ) {
+  val activeEffects: List<AppliedEffect>
+    get() {
+      if (effects.isNotEmpty()) return effects
+      if (effect != VideoEffect.NONE) return listOf(AppliedEffect(id = "legacy_${id}", effect = effect, intensity = effectIntensity))
+      return emptyList()
+    }
+
   val effectiveDurationMs: Long
     get() {
       val raw = (trimEndMs - trimStartMs).coerceAtLeast(200L)

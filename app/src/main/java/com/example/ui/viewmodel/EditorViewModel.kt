@@ -486,7 +486,86 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val proj = _currentProject.value ?: return
     saveUndoState(proj)
     val updatedClips = proj.clips.map {
-      if (it.id == clipId) it.copy(effect = effect, effectIntensity = intensity) else it
+      if (it.id == clipId) {
+        val existing = it.effects.toMutableList()
+        val index = existing.indexOfFirst { fx -> fx.effect == effect }
+        if (index >= 0) {
+          existing[index] = existing[index].copy(intensity = intensity)
+        } else if (effect != VideoEffect.NONE) {
+          existing.add(AppliedEffect(effect = effect, intensity = intensity))
+        }
+        it.copy(effect = effect, effectIntensity = intensity, effects = existing)
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun addEffectToClip(clipId: String, effect: VideoEffect, intensity: Float = 0.8f) {
+    if (effect == VideoEffect.NONE) return
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        val existing = it.activeEffects.toMutableList()
+        val newEffect = AppliedEffect(effect = effect, intensity = intensity)
+        existing.add(newEffect)
+        it.copy(effect = effect, effectIntensity = intensity, effects = existing)
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun removeEffectFromClip(clipId: String, effectId: String) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        val filtered = it.activeEffects.filter { fx -> fx.id != effectId }
+        val fallbackEffect = filtered.lastOrNull()?.effect ?: VideoEffect.NONE
+        val fallbackIntensity = filtered.lastOrNull()?.intensity ?: 0.8f
+        it.copy(effect = fallbackEffect, effectIntensity = fallbackIntensity, effects = filtered)
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun updateEffectIntensity(clipId: String, effectId: String, intensity: Float) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        val updated = it.activeEffects.map { fx ->
+          if (fx.id == effectId) fx.copy(intensity = intensity) else fx
+        }
+        it.copy(effects = updated)
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun reorderClipEffects(clipId: String, fromIndex: Int, toIndex: Int) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        val mutable = it.activeEffects.toMutableList()
+        if (fromIndex in mutable.indices && toIndex in mutable.indices) {
+          val item = mutable.removeAt(fromIndex)
+          mutable.add(toIndex, item)
+        }
+        it.copy(effects = mutable)
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun clearClipEffects(clipId: String) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        it.copy(effect = VideoEffect.NONE, effects = emptyList())
+      } else it
     }
     commitProject(proj.copy(clips = updatedClips))
   }
@@ -498,6 +577,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
       if (it.id == clipId) it.copy(transitionToNext = transition, transitionDurationMs = durationMs) else it
     }
     commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun updateTransitionDuration(clipId: String, durationMs: Long) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) it.copy(transitionDurationMs = durationMs.coerceIn(200L, 3000L)) else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun removeClipTransition(clipId: String) {
+    updateClipTransition(clipId, TransitionType.NONE)
   }
 
   fun rotateClip(clipId: String) {
