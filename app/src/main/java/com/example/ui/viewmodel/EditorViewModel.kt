@@ -24,7 +24,8 @@ enum class AppScreen {
   EDITOR,
   TEMPLATES,
   AI_LAB,
-  PROFILE
+  PROFILE,
+  OWNER_STUDIO
 }
 
 enum class ToolTab {
@@ -72,6 +73,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
   private val _selectedTextId = MutableStateFlow<String?>(null)
   val selectedTextId: StateFlow<String?> = _selectedTextId.asStateFlow()
+
+  private val _selectedStickerId = MutableStateFlow<String?>(null)
+  val selectedStickerId: StateFlow<String?> = _selectedStickerId.asStateFlow()
+
+  val effectPresets: StateFlow<List<EffectPreset>> = repository.effectPresets
+  val customTemplates: StateFlow<List<CustomTemplate>> = repository.customTemplates
+  val isOwnerMode: StateFlow<Boolean> = repository.isOwnerMode
 
   private val _activeToolTab = MutableStateFlow(ToolTab.NONE)
   val activeToolTab: StateFlow<ToolTab> = _activeToolTab.asStateFlow()
@@ -911,6 +919,84 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     repository.saveProject(_currentProject.value!!)
   }
 
+  fun updateTextTransform(textId: String, x: Float, y: Float, rotation: Float, scale: Float) {
+    val proj = _currentProject.value ?: return
+    val updated = proj.textOverlays.map {
+      if (it.id == textId) it.copy(
+        positionX = x.coerceIn(0.05f, 0.95f),
+        positionY = y.coerceIn(0.05f, 0.95f),
+        rotationDegrees = rotation,
+        scale = scale.coerceIn(0.4f, 3.5f)
+      ) else it
+    }
+    _currentProject.value = proj.copy(textOverlays = updated)
+    repository.saveProject(_currentProject.value!!)
+  }
+
+  fun updateTextProperties(
+    textId: String,
+    text: String,
+    colorHex: String,
+    bgColorHex: String?,
+    fontStyle: String,
+    animation: TextAnimation,
+    fontSize: Float,
+    hasStroke: Boolean = true,
+    strokeColor: String = "#000000",
+    hasShadow: Boolean = false,
+    shadowColor: String = "#000000",
+    alignment: String = "CENTER",
+    rotation: Float = 0f,
+    scale: Float = 1.0f
+  ) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updated = proj.textOverlays.map {
+      if (it.id == textId) it.copy(
+        text = text,
+        colorHex = colorHex,
+        bgColorHex = bgColorHex,
+        fontStyleName = fontStyle,
+        animationType = animation,
+        fontSizeSp = fontSize,
+        hasStroke = hasStroke,
+        strokeColorHex = strokeColor,
+        hasShadow = hasShadow,
+        shadowColorHex = shadowColor,
+        alignment = alignment,
+        rotationDegrees = rotation,
+        scale = scale
+      ) else it
+    }
+    commitProject(proj.copy(textOverlays = updated))
+  }
+
+  fun updateTextTiming(textId: String, startMs: Long, durationMs: Long) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updated = proj.textOverlays.map {
+      if (it.id == textId) it.copy(
+        startAtMs = startMs.coerceAtLeast(0L),
+        durationMs = durationMs.coerceAtLeast(300L)
+      ) else it
+    }
+    commitProject(proj.copy(textOverlays = updated))
+  }
+
+  fun duplicateText(textId: String) {
+    val proj = _currentProject.value ?: return
+    val target = proj.textOverlays.find { it.id == textId } ?: return
+    saveUndoState(proj)
+    val copy = target.copy(
+      id = "txt_${UUID.randomUUID().toString().take(6)}",
+      text = "${target.text} (Copy)",
+      positionX = (target.positionX + 0.05f).coerceIn(0.05f, 0.95f),
+      positionY = (target.positionY + 0.05f).coerceIn(0.05f, 0.95f)
+    )
+    commitProject(proj.copy(textOverlays = proj.textOverlays + copy))
+    _selectedTextId.value = copy.id
+  }
+
   fun updateTextSize(textId: String, newSizeSp: Float) {
     val proj = _currentProject.value ?: return
     val updated = proj.textOverlays.map {
@@ -920,12 +1006,135 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     repository.saveProject(_currentProject.value!!)
   }
 
+  // --- Sticker Controls & Gestures ---
+
+  fun selectSticker(stickerId: String?) {
+    _selectedStickerId.value = stickerId
+    _selectedClipId.value = null
+    _selectedAudioId.value = null
+    _selectedTextId.value = null
+    if (stickerId != null) {
+      _activeToolTab.value = ToolTab.STICKERS
+    }
+  }
+
+  fun updateStickerPosition(stickerId: String, newX: Float, newY: Float) {
+    val proj = _currentProject.value ?: return
+    val updated = proj.stickers.map {
+      if (it.id == stickerId) it.copy(positionX = newX.coerceIn(0.05f, 0.95f), positionY = newY.coerceIn(0.05f, 0.95f)) else it
+    }
+    _currentProject.value = proj.copy(stickers = updated)
+    repository.saveProject(_currentProject.value!!)
+  }
+
+  fun updateStickerTransform(stickerId: String, x: Float, y: Float, rotation: Float, scale: Float) {
+    val proj = _currentProject.value ?: return
+    val updated = proj.stickers.map {
+      if (it.id == stickerId) it.copy(
+        positionX = x.coerceIn(0.05f, 0.95f),
+        positionY = y.coerceIn(0.05f, 0.95f),
+        rotationDegrees = rotation,
+        scale = scale.coerceIn(0.4f, 3.5f)
+      ) else it
+    }
+    _currentProject.value = proj.copy(stickers = updated)
+    repository.saveProject(_currentProject.value!!)
+  }
+
+  fun updateStickerTiming(stickerId: String, startMs: Long, durationMs: Long) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updated = proj.stickers.map {
+      if (it.id == stickerId) it.copy(
+        startAtMs = startMs.coerceAtLeast(0L),
+        durationMs = durationMs.coerceAtLeast(300L)
+      ) else it
+    }
+    commitProject(proj.copy(stickers = updated))
+  }
+
+  fun duplicateSticker(stickerId: String) {
+    val proj = _currentProject.value ?: return
+    val target = proj.stickers.find { it.id == stickerId } ?: return
+    saveUndoState(proj)
+    val copy = target.copy(
+      id = "stk_${UUID.randomUUID().toString().take(6)}",
+      positionX = (target.positionX + 0.05f).coerceIn(0.05f, 0.95f),
+      positionY = (target.positionY + 0.05f).coerceIn(0.05f, 0.95f)
+    )
+    commitProject(proj.copy(stickers = proj.stickers + copy))
+    _selectedStickerId.value = copy.id
+  }
+
+  // --- Audio Track Operations ---
+
+  fun duplicateAudio(audioId: String) {
+    val proj = _currentProject.value ?: return
+    val target = proj.audioTracks.find { it.id == audioId } ?: return
+    saveUndoState(proj)
+    val copy = target.copy(
+      id = "audio_${UUID.randomUUID().toString().take(6)}",
+      title = "${target.title} (Copy)",
+      startAtMs = target.startAtMs + target.durationMs
+    )
+    commitProject(proj.copy(audioTracks = proj.audioTracks + copy))
+    _selectedAudioId.value = copy.id
+  }
+
   fun updateAudioStartTime(audioId: String, newStartMs: Long) {
     val proj = _currentProject.value ?: return
     val updated = proj.audioTracks.map {
       if (it.id == audioId) it.copy(startAtMs = newStartMs.coerceAtLeast(0L)) else it
     }
     commitProject(proj.copy(audioTracks = updated))
+  }
+
+  // --- Owner Studio & Effect Presets Operations ---
+
+  fun setOwnerMode(enabled: Boolean) {
+    repository.setOwnerMode(enabled)
+  }
+
+  fun applyEffectPresetToClip(clipId: String, preset: EffectPreset) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) {
+        val newEffects = preset.effects.map { fx -> fx.copy(id = "fx_${UUID.randomUUID().toString().take(6)}") }
+        val fallbackEffect = newEffects.firstOrNull()?.effect ?: VideoEffect.NONE
+        val fallbackIntensity = newEffects.firstOrNull()?.intensity ?: 0.8f
+        it.copy(
+          effect = fallbackEffect,
+          effectIntensity = fallbackIntensity,
+          effects = newEffects
+        )
+      } else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun saveCustomEffectPreset(preset: EffectPreset) {
+    repository.saveEffectPreset(preset)
+  }
+
+  fun deleteEffectPreset(presetId: String) {
+    repository.deleteEffectPreset(presetId)
+  }
+
+  fun publishEffectPreset(presetId: String, publish: Boolean) {
+    repository.publishEffectPreset(presetId, publish)
+  }
+
+  fun saveCustomTemplate(template: CustomTemplate) {
+    repository.saveCustomTemplate(template)
+  }
+
+  fun deleteCustomTemplate(templateId: String) {
+    repository.deleteCustomTemplate(templateId)
+  }
+
+  fun publishCustomTemplate(templateId: String, publish: Boolean) {
+    repository.publishCustomTemplate(templateId, publish)
   }
 
   // --- Export Engine ---

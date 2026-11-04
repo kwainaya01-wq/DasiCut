@@ -52,6 +52,16 @@ fun VideoPreviewCanvas(
   onChangeQualityClick: () -> Unit,
   onUpdateTextPosition: (String, Float, Float) -> Unit = { _, _, _ -> },
   onSelectText: (String) -> Unit = {},
+  selectedTextId: String? = null,
+  selectedStickerId: String? = null,
+  onUpdateTextTransform: (String, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+  onUpdateStickerTransform: (String, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+  onSelectSticker: (String) -> Unit = {},
+  onDeleteText: (String) -> Unit = {},
+  onDuplicateText: (String) -> Unit = {},
+  onDeleteSticker: (String) -> Unit = {},
+  onDuplicateSticker: (String) -> Unit = {},
+  onEditText: (String) -> Unit = {},
   playerManager: NativeVideoPlayerManager? = null,
   onToggleMute: () -> Unit = {},
   isRetouchBypass: Boolean = false,
@@ -252,8 +262,10 @@ fun VideoPreviewCanvas(
           )
         }
 
-        // Text Overlays with interactive dragging
+        // 3. Text Overlays with interactive Drag, Rotate, Scale and Action Handles
         activeTexts.forEach { textOverlay ->
+          val isSelected = textOverlay.id == selectedTextId
+
           Box(
             modifier = Modifier
               .align(Alignment.Center)
@@ -261,13 +273,18 @@ fun VideoPreviewCanvas(
                 x = (textOverlay.positionX - 0.5f).dp * 260,
                 y = (textOverlay.positionY - 0.5f).dp * 260
               )
+              .graphicsLayer {
+                rotationZ = textOverlay.rotationDegrees
+                scaleX = textOverlay.scale
+                scaleY = textOverlay.scale
+              }
               .pointerInput(textOverlay.id) {
                 detectDragGestures(
                   onDragStart = { onSelectText(textOverlay.id) },
                   onDrag = { change, dragAmount ->
                     change.consume()
-                    val newX = (textOverlay.positionX + dragAmount.x / 400f).coerceIn(0.08f, 0.92f)
-                    val newY = (textOverlay.positionY + dragAmount.y / 400f).coerceIn(0.08f, 0.92f)
+                    val newX = (textOverlay.positionX + dragAmount.x / 360f).coerceIn(0.06f, 0.94f)
+                    val newY = (textOverlay.positionY + dragAmount.y / 360f).coerceIn(0.06f, 0.94f)
                     onUpdateTextPosition(textOverlay.id, newX, newY)
                   }
                 )
@@ -275,26 +292,84 @@ fun VideoPreviewCanvas(
               .clickable { onSelectText(textOverlay.id) }
               .padding(4.dp)
           ) {
-            Surface(
-              shape = RoundedCornerShape(6.dp),
-              color = Color(android.graphics.Color.parseColor(textOverlay.bgColorHex ?: "#99000000")),
-              border = if (textOverlay.hasStroke) BorderStroke(1.dp, Color(android.graphics.Color.parseColor(textOverlay.strokeColorHex))) else BorderStroke(1.dp, Color(0x33FFFFFF)),
-              modifier = Modifier.padding(2.dp)
-            ) {
-              Text(
-                text = textOverlay.text,
-                color = Color(android.graphics.Color.parseColor(textOverlay.colorHex)),
-                fontSize = (textOverlay.fontSizeSp * 0.7f).sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-              )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              // Text Content surface
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(android.graphics.Color.parseColor(textOverlay.bgColorHex ?: "#99000000")),
+                border = if (isSelected) BorderStroke(1.5.dp, EmeraldPrimary) else if (textOverlay.hasStroke) BorderStroke(1.dp, Color(android.graphics.Color.parseColor(textOverlay.strokeColorHex))) else BorderStroke(1.dp, Color(0x33FFFFFF)),
+                shadowElevation = if (textOverlay.hasShadow) 6.dp else 0.dp,
+                modifier = Modifier.padding(2.dp)
+              ) {
+                Text(
+                  text = textOverlay.text,
+                  color = Color(android.graphics.Color.parseColor(textOverlay.colorHex)),
+                  fontSize = (textOverlay.fontSizeSp * 0.7f).sp,
+                  fontWeight = FontWeight.Bold,
+                  textAlign = when (textOverlay.alignment.uppercase()) {
+                    "LEFT" -> TextAlign.Left
+                    "RIGHT" -> TextAlign.Right
+                    else -> TextAlign.Center
+                  },
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+              }
+
+              // Selected floating toolbar for text (Edit, Rotate +15°, Scale +, Duplicate, Delete)
+              if (isSelected) {
+                Row(
+                  modifier = Modifier
+                    .padding(top = 2.dp)
+                    .background(Color(0xEE090C10), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit Text",
+                    tint = EmeraldPrimary,
+                    modifier = Modifier.size(12.dp).clickable { onEditText(textOverlay.id) }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.RotateRight,
+                    contentDescription = "Rotate Text",
+                    tint = CyanAccent,
+                    modifier = Modifier.size(12.dp).clickable {
+                      onUpdateTextTransform(textOverlay.id, textOverlay.positionX, textOverlay.positionY, (textOverlay.rotationDegrees + 15f) % 360f, textOverlay.scale)
+                    }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = "Scale Up Text",
+                    tint = GoldAccent,
+                    modifier = Modifier.size(12.dp).clickable {
+                      val newScale = (textOverlay.scale + 0.15f).coerceAtMost(3.0f)
+                      onUpdateTextTransform(textOverlay.id, textOverlay.positionX, textOverlay.positionY, textOverlay.rotationDegrees, newScale)
+                    }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Duplicate Text",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(12.dp).clickable { onDuplicateText(textOverlay.id) }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Text",
+                    tint = PlayheadRed,
+                    modifier = Modifier.size(12.dp).clickable { onDeleteText(textOverlay.id) }
+                  )
+                }
+              }
             }
           }
         }
 
-        // Active Stickers
+        // 4. Active Stickers with interactive Drag, Rotate, Scale and Action Handles
         activeStickers.forEach { sticker ->
+          val isSelected = sticker.id == selectedStickerId
+
           Box(
             modifier = Modifier
               .align(Alignment.Center)
@@ -302,11 +377,78 @@ fun VideoPreviewCanvas(
                 x = (sticker.positionX - 0.5f).dp * 200,
                 y = (sticker.positionY - 0.5f).dp * 200
               )
+              .graphicsLayer {
+                rotationZ = sticker.rotationDegrees
+                scaleX = sticker.scale
+                scaleY = sticker.scale
+              }
+              .pointerInput(sticker.id) {
+                detectDragGestures(
+                  onDragStart = { onSelectSticker(sticker.id) },
+                  onDrag = { change, dragAmount ->
+                    change.consume()
+                    val newX = (sticker.positionX + dragAmount.x / 300f).coerceIn(0.08f, 0.92f)
+                    val newY = (sticker.positionY + dragAmount.y / 300f).coerceIn(0.08f, 0.92f)
+                    onUpdateStickerTransform(sticker.id, newX, newY, sticker.rotationDegrees, sticker.scale)
+                  }
+                )
+              }
+              .clickable { onSelectSticker(sticker.id) }
+              .padding(4.dp)
           ) {
-            Text(
-              text = sticker.emojiOrSymbol,
-              fontSize = (28 * sticker.scale).sp
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Box(
+                modifier = Modifier
+                  .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) GoldAccent else Color.Transparent, RoundedCornerShape(4.dp))
+                  .padding(4.dp)
+              ) {
+                Text(
+                  text = sticker.emojiOrSymbol,
+                  fontSize = (28 * sticker.scale).sp
+                )
+              }
+
+              if (isSelected) {
+                Row(
+                  modifier = Modifier
+                    .padding(top = 2.dp)
+                    .background(Color(0xEE090C10), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.RotateRight,
+                    contentDescription = "Rotate Sticker",
+                    tint = CyanAccent,
+                    modifier = Modifier.size(12.dp).clickable {
+                      onUpdateStickerTransform(sticker.id, sticker.positionX, sticker.positionY, (sticker.rotationDegrees + 20f) % 360f, sticker.scale)
+                    }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = "Scale Up Sticker",
+                    tint = GoldAccent,
+                    modifier = Modifier.size(12.dp).clickable {
+                      val newScale = (sticker.scale + 0.2f).coerceAtMost(3.0f)
+                      onUpdateStickerTransform(sticker.id, sticker.positionX, sticker.positionY, sticker.rotationDegrees, newScale)
+                    }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Duplicate Sticker",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(12.dp).clickable { onDuplicateSticker(sticker.id) }
+                  )
+                  Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Sticker",
+                    tint = PlayheadRed,
+                    modifier = Modifier.size(12.dp).clickable { onDeleteSticker(sticker.id) }
+                  )
+                }
+              }
+            }
           }
         }
 

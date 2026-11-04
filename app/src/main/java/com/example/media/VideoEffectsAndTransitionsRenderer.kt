@@ -882,13 +882,226 @@ object VideoEffectsAndTransitionsRenderer {
         )
       }
 
-      VideoEffect.MOTION_SHAKE -> {
-        val shakeOffset = (if (animPhase > 0.5f) 7f else -7f) * intensity
+      VideoEffect.MOTION_SHAKE, VideoEffect.BEAT_SHAKE -> {
+        val shakeOffset = (if (animPhase > 0.5f) 8f else -8f) * intensity
         scope.drawRect(
-          color = Color.White.copy(alpha = 0.22f * intensity),
+          color = Color.White.copy(alpha = 0.25f * intensity),
           topLeft = Offset(shakeOffset, shakeOffset),
           size = size,
           blendMode = BlendMode.Overlay
+        )
+      }
+
+      VideoEffect.CAMERA_SHAKE -> {
+        val rand = Random(((animPhase * 60).toInt()))
+        val dx = (rand.nextFloat() * 12f - 6f) * intensity
+        val dy = (rand.nextFloat() * 12f - 6f) * intensity
+        scope.drawRect(
+          color = Color.White.copy(alpha = 0.18f * intensity),
+          topLeft = Offset(dx, dy),
+          size = size,
+          blendMode = BlendMode.Screen
+        )
+      }
+
+      VideoEffect.EARTHQUAKE -> {
+        val quakeOffset = sin(animPhase * 31.4f) * 14f * intensity
+        scope.drawRect(
+          color = Color(0xFF00E5FF).copy(alpha = 0.22f * intensity),
+          topLeft = Offset(quakeOffset, -quakeOffset * 0.5f),
+          size = size,
+          blendMode = BlendMode.Screen
+        )
+        scope.drawRect(
+          color = Color(0xFFFF0055).copy(alpha = 0.22f * intensity),
+          topLeft = Offset(-quakeOffset, quakeOffset * 0.5f),
+          size = size,
+          blendMode = BlendMode.Screen
+        )
+      }
+
+      VideoEffect.WHIP_ZOOM -> {
+        val pulse = (sin(animPhase * 6.28f) * 0.12f * intensity)
+        scope.scale(1f + pulse, pivot = Offset(width * 0.5f, height * 0.5f)) {
+          drawCircle(
+            brush = Brush.radialGradient(
+              colors = listOf(Color.Transparent, Color(0x66FFFFFF).copy(alpha = 0.35f * intensity)),
+              center = Offset(width * 0.5f, height * 0.5f),
+              radius = width * 0.6f
+            ),
+            radius = width * 0.6f,
+            center = Offset(width * 0.5f, height * 0.5f)
+          )
+        }
+      }
+
+      VideoEffect.BODY_NEON_STROKE -> {
+        // Neon silhouette aura outline
+        scope.drawCircle(
+          color = Color(0xFF00E676).copy(alpha = 0.55f * intensity),
+          radius = width * 0.38f,
+          center = Offset(width * 0.5f, height * 0.52f),
+          blendMode = BlendMode.Plus
+        )
+        scope.drawCircle(
+          color = Color(0xFF00E5FF).copy(alpha = 0.40f * intensity),
+          radius = width * 0.42f,
+          center = Offset(width * 0.5f, height * 0.52f),
+          blendMode = BlendMode.Screen
+        )
+      }
+
+      VideoEffect.AURA_GLOW -> {
+        scope.drawCircle(
+          brush = Brush.radialGradient(
+            colors = listOf(
+              Color(0xFFFFD54F).copy(alpha = 0.60f * intensity),
+              Color(0xFFFF6D00).copy(alpha = 0.30f * intensity),
+              Color.Transparent
+            ),
+            center = Offset(width * 0.5f, height * 0.48f),
+            radius = width * 0.55f
+          ),
+          radius = width * 0.55f,
+          center = Offset(width * 0.5f, height * 0.48f),
+          blendMode = BlendMode.Plus
+        )
+      }
+
+      VideoEffect.SHADOW_CLONE -> {
+        val echoShift = 18f * intensity
+        scope.drawRect(
+          color = Color(0xFF00E5FF).copy(alpha = 0.32f * intensity),
+          topLeft = Offset(-echoShift, 0f),
+          size = size,
+          blendMode = BlendMode.Screen
+        )
+        scope.drawRect(
+          color = Color(0xFFFF2A85).copy(alpha = 0.32f * intensity),
+          topLeft = Offset(echoShift, 0f),
+          size = size,
+          blendMode = BlendMode.Screen
+        )
+      }
+
+      VideoEffect.PORTRAIT_FOCUS -> {
+        scope.drawRect(
+          brush = Brush.radialGradient(
+            colors = listOf(Color.Transparent, Color(0x99000000).copy(alpha = 0.70f * intensity)),
+            center = Offset(width * 0.5f, height * 0.45f),
+            radius = width * 0.45f
+          )
+        )
+      }
+
+      VideoEffect.GOLD_DUST_PARTICLES -> {
+        val rand = Random(((animPhase * 40).toInt()))
+        for (i in 0 until 18) {
+          val px = rand.nextFloat() * width
+          val py = (rand.nextFloat() * height + (animPhase * height * 0.5f)) % height
+          val pr = (2f + rand.nextFloat() * 4f) * intensity
+          scope.drawCircle(
+            color = Color(0xFFFFD54F).copy(alpha = 0.85f * intensity),
+            radius = pr,
+            center = Offset(px, py),
+            blendMode = BlendMode.Plus
+          )
+        }
+      }
+
+      VideoEffect.CONFETTI_BURST -> {
+        val rand = Random(((animPhase * 35).toInt()))
+        val colors = listOf(Color(0xFF00E676), Color(0xFFFF2A85), Color(0xFFFFD54F), Color(0xFF00E5FF))
+        for (i in 0 until 22) {
+          val px = rand.nextFloat() * width
+          val py = (rand.nextFloat() * height + (animPhase * height * 0.8f)) % height
+          val col = colors[i % colors.size]
+          scope.drawRect(
+            color = col.copy(alpha = 0.80f * intensity),
+            topLeft = Offset(px, py),
+            size = Size(8f * intensity, 4f * intensity)
+          )
+        }
+      }
+
+      VideoEffect.SNOW_FALL -> {
+        val rand = Random(((animPhase * 30).toInt()))
+        for (i in 0 until 25) {
+          val px = rand.nextFloat() * width
+          val py = (rand.nextFloat() * height + (animPhase * height * 0.6f)) % height
+          val pr = (1.5f + rand.nextFloat() * 3f) * intensity
+          scope.drawCircle(
+            color = Color.White.copy(alpha = 0.75f * intensity),
+            radius = pr,
+            center = Offset(px, py)
+          )
+        }
+      }
+
+      VideoEffect.FIRE_EMBERS -> {
+        val rand = Random(((animPhase * 45).toInt()))
+        for (i in 0 until 20) {
+          val px = rand.nextFloat() * width
+          val py = height - ((rand.nextFloat() * height + (animPhase * height * 0.7f)) % height)
+          val pr = (2f + rand.nextFloat() * 3.5f) * intensity
+          scope.drawCircle(
+            color = Color(0xFFFF5722).copy(alpha = 0.90f * intensity),
+            radius = pr,
+            center = Offset(px, py),
+            blendMode = BlendMode.Plus
+          )
+        }
+      }
+
+      VideoEffect.WARP_DISTORTION -> {
+        val wave = sin(animPhase * 12.5f) * 16f * intensity
+        scope.drawRect(
+          brush = Brush.verticalGradient(
+            colors = listOf(Color.Transparent, Color(0x5500E5FF).copy(alpha = 0.40f * intensity), Color.Transparent),
+            startY = (height * animPhase),
+            endY = (height * animPhase) + 80f
+          ),
+          topLeft = Offset(wave, 0f),
+          size = size,
+          blendMode = BlendMode.Overlay
+        )
+      }
+
+      VideoEffect.FISHEYE_LENS -> {
+        scope.drawCircle(
+          brush = Brush.radialGradient(
+            colors = listOf(Color.Transparent, Color(0x66000000).copy(alpha = 0.60f * intensity)),
+            center = Offset(width * 0.5f, height * 0.5f),
+            radius = width * 0.50f
+          ),
+          radius = width * 0.50f,
+          center = Offset(width * 0.5f, height * 0.5f)
+        )
+      }
+
+      VideoEffect.VORTEX_SWIRL -> {
+        scope.rotate(animPhase * 360f * intensity, pivot = Offset(width * 0.5f, height * 0.5f)) {
+          drawCircle(
+            brush = Brush.radialGradient(
+              colors = listOf(Color.Transparent, Color(0x5500E676).copy(alpha = 0.45f * intensity), Color.Transparent),
+              center = Offset(width * 0.5f, height * 0.5f),
+              radius = width * 0.45f
+            ),
+            radius = width * 0.45f,
+            center = Offset(width * 0.5f, height * 0.5f),
+            blendMode = BlendMode.Screen
+          )
+        }
+      }
+
+      VideoEffect.RIPPLE_DISPLACEMENT -> {
+        val ripRadius = (animPhase * width * 0.65f) % (width * 0.65f)
+        scope.drawCircle(
+          color = Color.White.copy(alpha = (1f - ripRadius / (width * 0.65f)) * 0.45f * intensity),
+          radius = ripRadius,
+          center = Offset(width * 0.5f, height * 0.5f),
+          style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6f * intensity),
+          blendMode = BlendMode.Screen
         )
       }
 

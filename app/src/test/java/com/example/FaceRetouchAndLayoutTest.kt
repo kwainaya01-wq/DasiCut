@@ -78,4 +78,66 @@ class FaceRetouchAndLayoutTest {
     // Must have at least 50 real video effects
     assertTrue("Effects library should contain 50+ effects, found ${totalEffects.size}", totalEffects.size >= 50)
   }
+
+  @Test
+  fun testTextOverlayTransformsAndProperties() {
+    val text = com.example.model.TextOverlay(
+      id = "txt_1",
+      text = "Desi Bollywood Title",
+      rotationDegrees = 45f,
+      scale = 1.5f,
+      alignment = "RIGHT",
+      hasShadow = true,
+      shadowColorHex = "#000000"
+    )
+    assertEquals(45f, text.rotationDegrees, 0.01f)
+    assertEquals(1.5f, text.scale, 0.01f)
+    assertEquals("RIGHT", text.alignment)
+    assertTrue(text.hasShadow)
+    assertEquals("#000000", text.shadowColorHex)
+  }
+
+  @Test
+  fun testStickerOverlayTransforms() {
+    val sticker = com.example.model.StickerOverlay(
+      id = "stk_1",
+      emojiOrSymbol = "🔥",
+      label = "Fire",
+      rotationDegrees = -25f,
+      scale = 1.8f,
+      hasShadow = true
+    )
+    assertEquals(-25f, sticker.rotationDegrees, 0.01f)
+    assertEquals(1.8f, sticker.scale, 0.01f)
+    assertTrue(sticker.hasShadow)
+  }
+
+  @Test
+  fun testEffectPresetModel() {
+    val preset = com.example.model.EffectPreset(
+      name = "Bollywood Aura",
+      description = "Golden Glow + Soft Focus",
+      effects = listOf(
+        com.example.model.AppliedEffect(effect = VideoEffect.CINEMATIC_GLOW, intensity = 0.85f),
+        com.example.model.AppliedEffect(effect = VideoEffect.SOFT_FOCUS, intensity = 0.60f)
+      ),
+      isPublished = true
+    )
+    assertEquals(2, preset.effects.size)
+    assertTrue(preset.isPublished)
+    assertEquals("Bollywood Aura", preset.name)
+  }
+
+  @Test
+  fun testCustomTemplateModel() {
+    val tpl = com.example.model.CustomTemplate(
+      title = "Desi Beat Drop 🥁",
+      requiredClipsCount = 4,
+      durationMs = 9000L,
+      isPublished = true
+    )
+    assertEquals(4, tpl.requiredClipsCount)
+    assertEquals(9000L, tpl.durationMs)
+    assertTrue(tpl.isPublished)
+  }
 }

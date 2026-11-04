@@ -89,12 +89,55 @@ fun ProfileScreen(
 
             Column(modifier = Modifier.weight(1f)) {
               Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Desi Creator Pro", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text("DesiCut Studio Owner", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(6.dp))
-                Icon(Icons.Default.Verified, contentDescription = "Verified", tint = EmeraldPrimary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Verified, contentDescription = "Verified", tint = GoldAccent, modifier = Modifier.size(16.dp))
               }
-              Text("Free Pro Creator Tier Active", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+              Text("mdwahid5112@gmail.com • Master Architect", style = MaterialTheme.typography.bodySmall, color = TextMuted)
             }
+          }
+        }
+      }
+
+      // Owner Studio Access Card
+      item {
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = CharcoalCard,
+          border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.OWNER_STUDIO) }
+            .testTag("open_owner_studio_card")
+        ) {
+          Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+              Surface(
+                shape = CircleShape,
+                color = GoldAccent.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, GoldAccent),
+                modifier = Modifier.size(46.dp)
+              ) {
+                Box(contentAlignment = Alignment.Center) {
+                  Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(24.dp))
+                }
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text("Owner & Effects Studio", style = MaterialTheme.typography.titleMedium, color = GoldAccent, fontWeight = FontWeight.Bold)
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text("👑", fontSize = 12.sp)
+                }
+                Text("Manage 50+ effects, build presets & templates", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+              }
+            }
+
+            Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = GoldAccent)
           }
         }
       }

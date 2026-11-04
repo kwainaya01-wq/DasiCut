@@ -43,6 +43,7 @@ fun EditorScreen(
   val selectedClipId by viewModel.selectedClipId.collectAsState()
   val selectedAudioId by viewModel.selectedAudioId.collectAsState()
   val selectedTextId by viewModel.selectedTextId.collectAsState()
+  val selectedStickerId by viewModel.selectedStickerId.collectAsState()
   val activeToolTab by viewModel.activeToolTab.collectAsState()
   val timelineZoom by viewModel.timelineZoom.collectAsState()
   val canUndo by viewModel.canUndo.collectAsState()
@@ -147,6 +148,33 @@ fun EditorScreen(
           onSelectText = { textId ->
             viewModel.selectText(textId)
           },
+          selectedTextId = selectedTextId,
+          selectedStickerId = selectedStickerId,
+          onUpdateTextTransform = { id, x, y, rot, sc ->
+            viewModel.updateTextTransform(id, x, y, rot, sc)
+          },
+          onUpdateStickerTransform = { id, x, y, rot, sc ->
+            viewModel.updateStickerTransform(id, x, y, rot, sc)
+          },
+          onSelectSticker = { id ->
+            viewModel.selectSticker(id)
+          },
+          onDeleteText = { id ->
+            viewModel.deleteTextOverlay(id)
+          },
+          onDuplicateText = { id ->
+            viewModel.duplicateText(id)
+          },
+          onDeleteSticker = { id ->
+            viewModel.removeSticker(id)
+          },
+          onDuplicateSticker = { id ->
+            viewModel.duplicateSticker(id)
+          },
+          onEditText = { id ->
+            viewModel.selectText(id)
+            showTextEditor = true
+          },
           playerManager = viewModel.playerManager,
           onToggleMute = {
             selectedClipId?.let { viewModel.toggleClipMute(it) }
@@ -174,11 +202,13 @@ fun EditorScreen(
             selectedClipId = selectedClipId,
             selectedAudioId = selectedAudioId,
             selectedTextId = selectedTextId,
+            selectedStickerId = selectedStickerId,
             zoom = timelineZoom,
             onPlayheadChanged = { viewModel.setPlayheadMs(it) },
             onSelectClip = { viewModel.selectClip(it) },
             onSelectAudio = { viewModel.selectAudio(it) },
             onSelectText = { viewModel.selectText(it) },
+            onSelectSticker = { viewModel.selectSticker(it) },
             onOpenTransitions = {
               viewModel.selectClip(it)
               viewModel.setToolTab(ToolTab.TRANSITIONS)
@@ -195,8 +225,28 @@ fun EditorScreen(
               viewModel.selectClip(clipId)
               replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
             },
+            onDuplicateClip = { viewModel.duplicateSelectedClip() },
+            onDeleteClip = { viewModel.deleteSelectedClip() },
             onAudioMove = { audioId, newStartMs ->
               viewModel.updateAudioStartTime(audioId, newStartMs)
+            },
+            onDuplicateAudio = { viewModel.duplicateAudio(it) },
+            onDeleteAudio = { viewModel.removeAudioTrack(it) },
+            onTextMove = { textId, newStartMs ->
+              val cur = currentProj.textOverlays.find { it.id == textId }
+              viewModel.updateTextTiming(textId, newStartMs, cur?.durationMs ?: 3000L)
+            },
+            onDuplicateText = { viewModel.duplicateText(it) },
+            onDeleteText = { viewModel.deleteTextOverlay(it) },
+            onStickerMove = { stickerId, newStartMs ->
+              val cur = currentProj.stickers.find { it.id == stickerId }
+              viewModel.updateStickerTiming(stickerId, newStartMs, cur?.durationMs ?: 3000L)
+            },
+            onDuplicateSticker = { viewModel.duplicateSticker(it) },
+            onDeleteSticker = { viewModel.removeSticker(it) },
+            onEditText = { textId ->
+              viewModel.selectText(textId)
+              showTextEditor = true
             }
           )
         }
@@ -287,6 +337,10 @@ fun EditorScreen(
           isRetouchBypass = isRetouchBypass,
           onRetouchBypassChanged = { bypass ->
             viewModel.setRetouchBypass(bypass)
+          },
+          effectPresets = viewModel.effectPresets.collectAsState().value,
+          onApplyEffectPreset = { preset ->
+            selectedClipId?.let { viewModel.applyEffectPresetToClip(it, preset) }
           }
         )
       }
@@ -327,10 +381,32 @@ fun EditorScreen(
 
   // Text Editor Dialog
   if (showTextEditor) {
+    val currentOverlay = currentProj.textOverlays.find { it.id == selectedTextId }
     TextEditorDialog(
+      initialOverlay = currentOverlay,
       onDismiss = { showTextEditor = false },
-      onSaveText = { text, colorHex, bgHex, animation, fontSize ->
-        viewModel.addTextOverlay(text, colorHex, bgHex, animation)
+      onSaveOverlay = { text, colorHex, bgHex, fontStyle, animation, fontSize, hasStroke, strokeColor, hasShadow, shadowColor, alignment, rotation, scale, durationMs ->
+        if (selectedTextId != null && currentOverlay != null) {
+          viewModel.updateTextProperties(
+            textId = selectedTextId!!,
+            text = text,
+            colorHex = colorHex,
+            bgColorHex = bgHex,
+            fontStyle = fontStyle,
+            animation = animation,
+            fontSize = fontSize,
+            hasStroke = hasStroke,
+            strokeColor = strokeColor,
+            hasShadow = hasShadow,
+            shadowColor = shadowColor,
+            alignment = alignment,
+            rotation = rotation,
+            scale = scale
+          )
+          viewModel.updateTextTiming(selectedTextId!!, currentOverlay.startAtMs, durationMs)
+        } else {
+          viewModel.addTextOverlay(text, colorHex, bgHex, animation)
+        }
       }
     )
   }

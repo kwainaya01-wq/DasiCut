@@ -19,8 +19,25 @@ class ProjectRepository(private val context: Context) {
 
   private val projectsFile = File(context.filesDir, "desicut_projects.json")
 
+  private val presetsFile = File(context.filesDir, "desicut_effects_presets.json")
+  private val _effectPresets = MutableStateFlow<List<com.example.model.EffectPreset>>(emptyList())
+  val effectPresets: StateFlow<List<com.example.model.EffectPreset>> = _effectPresets.asStateFlow()
+
+  private val templatesFile = File(context.filesDir, "desicut_custom_templates.json")
+  private val _customTemplates = MutableStateFlow<List<com.example.model.CustomTemplate>>(emptyList())
+  val customTemplates: StateFlow<List<com.example.model.CustomTemplate>> = _customTemplates.asStateFlow()
+
+  private val _isOwnerMode = MutableStateFlow(true)
+  val isOwnerMode: StateFlow<Boolean> = _isOwnerMode.asStateFlow()
+
+  fun setOwnerMode(enabled: Boolean) {
+    _isOwnerMode.value = enabled
+  }
+
   init {
     loadProjects()
+    loadEffectPresets()
+    loadCustomTemplates()
   }
 
   private fun loadProjects() {
@@ -206,8 +223,15 @@ class ProjectRepository(private val context: Context) {
       tObj.put("fontSizeSp", t.fontSizeSp.toDouble())
       tObj.put("colorHex", t.colorHex)
       tObj.put("bgColorHex", t.bgColorHex ?: "")
+      tObj.put("hasStroke", t.hasStroke)
+      tObj.put("strokeColorHex", t.strokeColorHex)
       tObj.put("fontStyleName", t.fontStyleName)
       tObj.put("animationType", t.animationType.name)
+      tObj.put("rotationDegrees", t.rotationDegrees.toDouble())
+      tObj.put("scale", t.scale.toDouble())
+      tObj.put("alignment", t.alignment)
+      tObj.put("hasShadow", t.hasShadow)
+      tObj.put("shadowColorHex", t.shadowColorHex)
       textArr.put(tObj)
     }
     obj.put("textOverlays", textArr)
@@ -222,6 +246,9 @@ class ProjectRepository(private val context: Context) {
       sObj.put("durationMs", s.durationMs)
       sObj.put("positionX", s.positionX.toDouble())
       sObj.put("positionY", s.positionY.toDouble())
+      sObj.put("scale", s.scale.toDouble())
+      sObj.put("rotationDegrees", s.rotationDegrees.toDouble())
+      sObj.put("hasShadow", s.hasShadow)
       stkArr.put(sObj)
     }
     obj.put("stickers", stkArr)
@@ -354,10 +381,17 @@ class ProjectRepository(private val context: Context) {
             fontSizeSp = tObj.optDouble("fontSizeSp", 24.0).toFloat(),
             colorHex = tObj.optString("colorHex", "#FFFFFF"),
             bgColorHex = tObj.optString("bgColorHex").takeIf { it.isNotBlank() },
+            hasStroke = tObj.optBoolean("hasStroke", true),
+            strokeColorHex = tObj.optString("strokeColorHex", "#000000"),
             fontStyleName = tObj.optString("fontStyleName", "Outfit Bold"),
             animationType = try {
               com.example.model.TextAnimation.valueOf(tObj.optString("animationType", "POP"))
-            } catch (_: Exception) { com.example.model.TextAnimation.POP }
+            } catch (_: Exception) { com.example.model.TextAnimation.POP },
+            rotationDegrees = tObj.optDouble("rotationDegrees", 0.0).toFloat(),
+            scale = tObj.optDouble("scale", 1.0).toFloat(),
+            alignment = tObj.optString("alignment", "CENTER"),
+            hasShadow = tObj.optBoolean("hasShadow", false),
+            shadowColorHex = tObj.optString("shadowColorHex", "#000000")
           )
         )
       }
@@ -376,7 +410,10 @@ class ProjectRepository(private val context: Context) {
             startAtMs = sObj.optLong("startAtMs", 0L),
             durationMs = sObj.optLong("durationMs", 3000L),
             positionX = sObj.optDouble("positionX", 0.5).toFloat(),
-            positionY = sObj.optDouble("positionY", 0.75).toFloat()
+            positionY = sObj.optDouble("positionY", 0.75).toFloat(),
+            scale = sObj.optDouble("scale", 1.2).toFloat(),
+            rotationDegrees = sObj.optDouble("rotationDegrees", 0.0).toFloat(),
+            hasShadow = sObj.optBoolean("hasShadow", false)
           )
         )
       }
@@ -393,6 +430,337 @@ class ProjectRepository(private val context: Context) {
       stickers = stickers,
       quality = quality,
       fps = fps
+    )
+  }
+
+  // ==========================================
+  // OWNER-CONTROLLED EFFECT PRESETS REPOSITORY
+  // ==========================================
+
+  fun loadEffectPresets() {
+    try {
+      if (presetsFile.exists()) {
+        val jsonStr = presetsFile.readText()
+        if (jsonStr.isNotBlank()) {
+          val arr = JSONArray(jsonStr)
+          val list = mutableListOf<com.example.model.EffectPreset>()
+          for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val fxList = mutableListOf<com.example.model.AppliedEffect>()
+            val fxArr = obj.optJSONArray("effects")
+            if (fxArr != null) {
+              for (j in 0 until fxArr.length()) {
+                val fObj = fxArr.getJSONObject(j)
+                val effectType = try {
+                  com.example.model.VideoEffect.valueOf(fObj.optString("effect", "NONE"))
+                } catch (_: Exception) { com.example.model.VideoEffect.NONE }
+                if (effectType != com.example.model.VideoEffect.NONE) {
+                  fxList.add(
+                    com.example.model.AppliedEffect(
+                      id = fObj.optString("id", "fx_$j"),
+                      effect = effectType,
+                      intensity = fObj.optDouble("intensity", 0.8).toFloat()
+                    )
+                  )
+                }
+              }
+            }
+            list.add(
+              com.example.model.EffectPreset(
+                id = obj.optString("id", UUID.randomUUID().toString()),
+                name = obj.optString("name", "Custom Preset"),
+                description = obj.optString("description", ""),
+                category = obj.optString("category", "Cinematic"),
+                thumbnailIcon = obj.optString("thumbnailIcon", "✨"),
+                effects = fxList,
+                isPublished = obj.optBoolean("isPublished", true),
+                isDraft = obj.optBoolean("isDraft", false),
+                createdBy = obj.optString("createdBy", "Studio Owner"),
+                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+              )
+            )
+          }
+          if (list.isNotEmpty()) {
+            _effectPresets.value = list
+            return
+          }
+        }
+      }
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+    // Default built-in presets created by studio owner
+    val defaults = getDefaultEffectPresets()
+    _effectPresets.value = defaults
+    savePresetsToDisk(defaults)
+  }
+
+  fun saveEffectPreset(preset: com.example.model.EffectPreset) {
+    val current = _effectPresets.value.toMutableList()
+    val idx = current.indexOfFirst { it.id == preset.id }
+    if (idx >= 0) {
+      current[idx] = preset
+    } else {
+      current.add(0, preset)
+    }
+    _effectPresets.value = current
+    savePresetsToDisk(current)
+  }
+
+  fun deleteEffectPreset(presetId: String) {
+    val current = _effectPresets.value.filter { it.id != presetId }
+    _effectPresets.value = current
+    savePresetsToDisk(current)
+  }
+
+  fun publishEffectPreset(presetId: String, publish: Boolean) {
+    val current = _effectPresets.value.map {
+      if (it.id == presetId) it.copy(isPublished = publish, isDraft = !publish) else it
+    }
+    _effectPresets.value = current
+    savePresetsToDisk(current)
+  }
+
+  private fun savePresetsToDisk(list: List<com.example.model.EffectPreset>) {
+    try {
+      val arr = JSONArray()
+      for (p in list) {
+        val obj = JSONObject()
+        obj.put("id", p.id)
+        obj.put("name", p.name)
+        obj.put("description", p.description)
+        obj.put("category", p.category)
+        obj.put("thumbnailIcon", p.thumbnailIcon)
+        obj.put("isPublished", p.isPublished)
+        obj.put("isDraft", p.isDraft)
+        obj.put("createdBy", p.createdBy)
+        obj.put("createdAt", p.createdAt)
+        val fxArr = JSONArray()
+        for (fx in p.effects) {
+          val fObj = JSONObject()
+          fObj.put("id", fx.id)
+          fObj.put("effect", fx.effect.name)
+          fObj.put("intensity", fx.intensity.toDouble())
+          fxArr.put(fObj)
+        }
+        obj.put("effects", fxArr)
+        arr.put(obj)
+      }
+      presetsFile.writeText(arr.toString(2))
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+  }
+
+  private fun getDefaultEffectPresets(): List<com.example.model.EffectPreset> {
+    return listOf(
+      com.example.model.EffectPreset(
+        id = "preset_glam",
+        name = "Bollywood Glam Aura",
+        description = "Radiant golden halo, dreamy highlight bloom and soft portrait focus",
+        category = "Cinematic",
+        thumbnailIcon = "👑",
+        effects = listOf(
+          com.example.model.AppliedEffect(id = "fx_1", effect = com.example.model.VideoEffect.CINEMATIC_GLOW, intensity = 0.85f),
+          com.example.model.AppliedEffect(id = "fx_2", effect = com.example.model.VideoEffect.GOLDEN_LIGHT, intensity = 0.70f),
+          com.example.model.AppliedEffect(id = "fx_3", effect = com.example.model.VideoEffect.SOFT_FOCUS, intensity = 0.60f)
+        ),
+        isPublished = true
+      ),
+      com.example.model.EffectPreset(
+        id = "preset_neon",
+        name = "Cyber Neon Pulse",
+        description = "Futuristic RGB displacement, rolling scanwaves and electric aura",
+        category = "Glitch",
+        thumbnailIcon = "⚡",
+        effects = listOf(
+          com.example.model.AppliedEffect(id = "fx_4", effect = com.example.model.VideoEffect.NEON_GLOW, intensity = 0.90f),
+          com.example.model.AppliedEffect(id = "fx_5", effect = com.example.model.VideoEffect.RGB_SPLIT, intensity = 0.75f),
+          com.example.model.AppliedEffect(id = "fx_6", effect = com.example.model.VideoEffect.SCANLINE_WAVE, intensity = 0.50f)
+        ),
+        isPublished = true
+      ),
+      com.example.model.EffectPreset(
+        id = "preset_desi",
+        name = "Desi Sunset Chai",
+        description = "Warm amber sun rays, deep film vignette and organic 35mm grain",
+        category = "Retro",
+        thumbnailIcon = "🌅",
+        effects = listOf(
+          com.example.model.AppliedEffect(id = "fx_7", effect = com.example.model.VideoEffect.SUN_RAYS, intensity = 0.80f),
+          com.example.model.AppliedEffect(id = "fx_8", effect = com.example.model.VideoEffect.MOVIE_GRAIN, intensity = 0.65f),
+          com.example.model.AppliedEffect(id = "fx_9", effect = com.example.model.VideoEffect.VIGNETTE, intensity = 0.70f)
+        ),
+        isPublished = true
+      ),
+      com.example.model.EffectPreset(
+        id = "preset_shake",
+        name = "Retro Tape Shake",
+        description = "Analog magnetic VHS artifacts with rhythmic beat camera pulse",
+        category = "Shake & Camera",
+        thumbnailIcon = "📼",
+        effects = listOf(
+          com.example.model.AppliedEffect(id = "fx_10", effect = com.example.model.VideoEffect.CAMERA_SHAKE, intensity = 0.75f),
+          com.example.model.AppliedEffect(id = "fx_11", effect = com.example.model.VideoEffect.VHS_GLITCH, intensity = 0.80f)
+        ),
+        isPublished = true
+      ),
+      com.example.model.EffectPreset(
+        id = "preset_body",
+        name = "Neon Body Clone",
+        description = "Cyber stroke silhouettes and luminous astral clone trail",
+        category = "Body & Motion",
+        thumbnailIcon = "👤",
+        effects = listOf(
+          com.example.model.AppliedEffect(id = "fx_12", effect = com.example.model.VideoEffect.BODY_NEON_STROKE, intensity = 0.85f),
+          com.example.model.AppliedEffect(id = "fx_13", effect = com.example.model.VideoEffect.SHADOW_CLONE, intensity = 0.70f)
+        ),
+        isPublished = true
+      )
+    )
+  }
+
+  // ==========================================
+  // OWNER-CONTROLLED TEMPLATES REPOSITORY
+  // ==========================================
+
+  fun loadCustomTemplates() {
+    try {
+      if (templatesFile.exists()) {
+        val jsonStr = templatesFile.readText()
+        if (jsonStr.isNotBlank()) {
+          val arr = JSONArray(jsonStr)
+          val list = mutableListOf<com.example.model.CustomTemplate>()
+          for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val ratioStr = obj.optString("aspectRatio", AspectRatio.RATIO_9_16.name)
+            val ratio = try { AspectRatio.valueOf(ratioStr) } catch (_: Exception) { AspectRatio.RATIO_9_16 }
+            list.add(
+              com.example.model.CustomTemplate(
+                id = obj.optString("id", "tpl_${UUID.randomUUID().toString().take(6)}"),
+                title = obj.optString("title", "Custom Template"),
+                category = obj.optString("category", "Trending"),
+                tagline = obj.optString("tagline", "DesiCut Studio Official"),
+                aspectRatio = ratio,
+                durationMs = obj.optLong("durationMs", 8000L),
+                requiredClipsCount = obj.optInt("requiredClipsCount", 3),
+                bgmName = obj.optString("bgmName", "Desi Beat"),
+                bpm = obj.optInt("bpm", 128),
+                usesCount = obj.optString("usesCount", "1.2k"),
+                gradientStartHex = obj.optString("gradientStartHex", "#0A2E20"),
+                gradientEndHex = obj.optString("gradientEndHex", "#051610"),
+                isPublished = obj.optBoolean("isPublished", true),
+                isDraft = obj.optBoolean("isDraft", false),
+                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+              )
+            )
+          }
+          if (list.isNotEmpty()) {
+            _customTemplates.value = list
+            return
+          }
+        }
+      }
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+    val defaults = getDefaultCustomTemplates()
+    _customTemplates.value = defaults
+    saveCustomTemplatesToDisk(defaults)
+  }
+
+  fun saveCustomTemplate(template: com.example.model.CustomTemplate) {
+    val current = _customTemplates.value.toMutableList()
+    val idx = current.indexOfFirst { it.id == template.id }
+    if (idx >= 0) {
+      current[idx] = template
+    } else {
+      current.add(0, template)
+    }
+    _customTemplates.value = current
+    saveCustomTemplatesToDisk(current)
+  }
+
+  fun deleteCustomTemplate(templateId: String) {
+    val current = _customTemplates.value.filter { it.id != templateId }
+    _customTemplates.value = current
+    saveCustomTemplatesToDisk(current)
+  }
+
+  fun publishCustomTemplate(templateId: String, publish: Boolean) {
+    val current = _customTemplates.value.map {
+      if (it.id == templateId) it.copy(isPublished = publish, isDraft = !publish) else it
+    }
+    _customTemplates.value = current
+    saveCustomTemplatesToDisk(current)
+  }
+
+  private fun saveCustomTemplatesToDisk(list: List<com.example.model.CustomTemplate>) {
+    try {
+      val arr = JSONArray()
+      for (t in list) {
+        val obj = JSONObject()
+        obj.put("id", t.id)
+        obj.put("title", t.title)
+        obj.put("category", t.category)
+        obj.put("tagline", t.tagline)
+        obj.put("aspectRatio", t.aspectRatio.name)
+        obj.put("durationMs", t.durationMs)
+        obj.put("requiredClipsCount", t.requiredClipsCount)
+        obj.put("bgmName", t.bgmName)
+        obj.put("bpm", t.bpm)
+        obj.put("usesCount", t.usesCount)
+        obj.put("gradientStartHex", t.gradientStartHex)
+        obj.put("gradientEndHex", t.gradientEndHex)
+        obj.put("isPublished", t.isPublished)
+        obj.put("isDraft", t.isDraft)
+        obj.put("createdAt", t.createdAt)
+        arr.put(obj)
+      }
+      templatesFile.writeText(arr.toString(2))
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+  }
+
+  private fun getDefaultCustomTemplates(): List<com.example.model.CustomTemplate> {
+    return listOf(
+      com.example.model.CustomTemplate(
+        id = "tpl_desi_beat_drop",
+        title = "Desi Beat Drop 🥁",
+        category = "Beat Sync",
+        tagline = "Sync clips with high-energy Dhol beats",
+        durationMs = 9000L,
+        requiredClipsCount = 4,
+        bgmName = "Bhangra Dhol Drop (132 BPM)",
+        gradientStartHex = "#FF416C",
+        gradientEndHex = "#8A2387",
+        isPublished = true
+      ),
+      com.example.model.CustomTemplate(
+        id = "tpl_cinematic_travel",
+        title = "Kashmir to Kanyakumari 🏔️",
+        category = "Travel",
+        tagline = "Epic aerial landscape flow with cinematic grading",
+        durationMs = 12000L,
+        requiredClipsCount = 5,
+        bgmName = "Flute & Santoor Ambient (85 BPM)",
+        gradientStartHex = "#00C9FF",
+        gradientEndHex = "#92FE9D",
+        isPublished = true
+      ),
+      com.example.model.CustomTemplate(
+        id = "tpl_wedding_glam",
+        title = "Royal Indian Wedding 💍",
+        category = "Status",
+        tagline = "Slow-mo luxury jewelry & outfit showcase",
+        durationMs = 15000L,
+        requiredClipsCount = 6,
+        bgmName = "Shehnai & Sitar Harmony (92 BPM)",
+        gradientStartHex = "#F37335",
+        gradientEndHex = "#FDC830",
+        isPublished = true
+      )
     )
   }
 }

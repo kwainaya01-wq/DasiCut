@@ -92,7 +92,11 @@ enum class EffectCategory(val displayName: String) {
   RETRO("Retro"),
   BLUR("Blur"),
   CREATIVE("Creative"),
-  COLOR("Color")
+  COLOR("Color"),
+  BODY("Body & Motion"),
+  SHAKE("Shake & Camera"),
+  PARTICLES("Particles"),
+  DISTORTION("Distortion")
 }
 
 enum class VideoEffect(
@@ -174,9 +178,33 @@ enum class VideoEffect(
   SUNSET_AMBER("Sunset Amber", "Lush crimson evening glow and dusk warmth", EffectCategory.COLOR, false),
   EMERALD_VIVID("Vivid Emerald", "Signature DesiCut rich emerald jewel tint", EffectCategory.COLOR, false),
 
-  // Extra / Aliases
+  // Shake & Camera Motion (Part 3)
+  CAMERA_SHAKE("Camera Shake", "Handheld organic camera tremor and jitter", EffectCategory.SHAKE, false),
+  BEAT_SHAKE("Beat Shake", "High-impact rhythmic bass drop shake", EffectCategory.SHAKE, false),
+  EARTHQUAKE("Earthquake Shake", "Violent dual-axis rumbling tremor", EffectCategory.SHAKE, true),
+  WHIP_ZOOM("Whip Zoom Shake", "Rapid punch-in bounce and recovery", EffectCategory.SHAKE, true),
+
+  // Body & Face Effects (Part 3)
+  BODY_NEON_STROKE("Body Neon Stroke", "Luminous cyber silhouette edge tracing", EffectCategory.BODY, true),
+  AURA_GLOW("Aura Glow", "Radiant golden and electric aura envelope", EffectCategory.BODY, false),
+  SHADOW_CLONE("Shadow Clone", "Trailing echo silhouette after-images", EffectCategory.BODY, true),
+  PORTRAIT_FOCUS("Portrait Focus", "Subject pop with background separation", EffectCategory.BODY, false),
+
+  // Particles (Part 3)
+  GOLD_DUST_PARTICLES("Gold Dust", "Drifting luminous golden sparkles and embers", EffectCategory.PARTICLES, false),
+  CONFETTI_BURST("Confetti Burst", "Festive Bollywood party celebration confetti", EffectCategory.PARTICLES, false),
+  SNOW_FALL("Snow Fall", "Delicate atmospheric winter snow particles", EffectCategory.PARTICLES, false),
+  FIRE_EMBERS("Fire Embers", "Rising glowing volcanic heat embers", EffectCategory.PARTICLES, true),
+
+  // Distortion (Part 3)
+  WARP_DISTORTION("Warp Wave", "Liquid ripple wave warp distortion", EffectCategory.DISTORTION, true),
+  FISHEYE_LENS("Fisheye Lens", "Ultra-wide optical barrel distortion", EffectCategory.DISTORTION, false),
+  VORTEX_SWIRL("Vortex Swirl", "Hypnotic spiral whirlpool displacement", EffectCategory.DISTORTION, true),
+  RIPPLE_DISPLACEMENT("Water Ripple", "Pond concentric acoustic wave ripple", EffectCategory.DISTORTION, false),
+
+  // Aliases
   FILM_GRAIN("Film Grain", "Authentic 35mm motion dust and grain", EffectCategory.CINEMATIC, false),
-  MOTION_SHAKE("Beat Shake", "Dynamic rhythmic camera pulse and vibration", EffectCategory.CREATIVE, false)
+  MOTION_SHAKE("Motion Shake", "Dynamic rhythmic camera pulse and vibration", EffectCategory.SHAKE, false)
 }
 
 data class AppliedEffect(
@@ -274,7 +302,12 @@ data class TextOverlay(
   val hasStroke: Boolean = true,
   val strokeColorHex: String = "#000000",
   val fontStyleName: String = "Outfit Bold",
-  val animationType: TextAnimation = TextAnimation.POP
+  val animationType: TextAnimation = TextAnimation.POP,
+  val rotationDegrees: Float = 0f,
+  val scale: Float = 1.0f,
+  val alignment: String = "CENTER", // LEFT, CENTER, RIGHT
+  val hasShadow: Boolean = false,
+  val shadowColorHex: String = "#000000"
 )
 
 data class StickerOverlay(
@@ -285,7 +318,50 @@ data class StickerOverlay(
   val durationMs: Long = 3000L,
   val positionX: Float = 0.5f,
   val positionY: Float = 0.75f,
-  val scale: Float = 1.2f
+  val scale: Float = 1.2f,
+  val rotationDegrees: Float = 0f,
+  val hasShadow: Boolean = false
+)
+
+enum class UserRole(val displayName: String) {
+  USER("Creator"),
+  OWNER("Studio Owner")
+}
+
+data class EffectPreset(
+  val id: String = java.util.UUID.randomUUID().toString().take(8),
+  val name: String,
+  val description: String,
+  val category: String = "Cinematic",
+  val thumbnailIcon: String = "✨",
+  val effects: List<AppliedEffect> = emptyList(),
+  val isPublished: Boolean = true,
+  val isDraft: Boolean = false,
+  val createdBy: String = "Studio Owner",
+  val authorizedParams: List<String> = listOf("intensity", "speed"),
+  val tags: List<String> = emptyList(),
+  val createdAt: Long = System.currentTimeMillis()
+)
+
+data class CustomTemplate(
+  val id: String = "tpl_${java.util.UUID.randomUUID().toString().take(8)}",
+  val title: String,
+  val category: String = "Trending",
+  val tagline: String = "Created in Owner Studio",
+  val aspectRatio: AspectRatio = AspectRatio.RATIO_9_16,
+  val durationMs: Long = 8000L,
+  val requiredClipsCount: Int = 3,
+  val bgmName: String = "Desi Beats",
+  val bpm: Int = 128,
+  val usesCount: String = "1.5k",
+  val previewClips: List<VideoClip> = emptyList(),
+  val previewTexts: List<TextOverlay> = emptyList(),
+  val previewBgm: AudioTrack? = null,
+  val gradientStartHex: String = "#0A2E20",
+  val gradientEndHex: String = "#051610",
+  val isPublished: Boolean = true,
+  val isDraft: Boolean = false,
+  val createdAt: Long = System.currentTimeMillis()
 )
 
 data class Project(
@@ -305,7 +381,8 @@ data class Project(
       val clipsDuration = clips.sumOf { it.effectiveDurationMs }
       val audioDuration = audioTracks.maxOfOrNull { it.startAtMs + it.durationMs } ?: 0L
       val textDuration = textOverlays.maxOfOrNull { it.startAtMs + it.durationMs } ?: 0L
-      return maxOf(clipsDuration, audioDuration, textDuration, 1000L)
+      val stickerDuration = stickers.maxOfOrNull { it.startAtMs + it.durationMs } ?: 0L
+      return maxOf(clipsDuration, audioDuration, textDuration, stickerDuration, 1000L)
     }
 }
 

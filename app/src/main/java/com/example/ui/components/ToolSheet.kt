@@ -65,6 +65,8 @@ fun ToolSheet(
   onRetouchReset: () -> Unit = {},
   isRetouchBypass: Boolean = false,
   onRetouchBypassChanged: (Boolean) -> Unit = {},
+  effectPresets: List<EffectPreset> = emptyList(),
+  onApplyEffectPreset: (EffectPreset) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   Column(
@@ -517,7 +519,78 @@ fun ToolSheet(
                   }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                // 2.5 Owner Studio Presets (Combinations of multiple effects with calibrated parameters)
+                val publishedPresets = remember(effectPresets) { effectPresets.filter { it.isPublished } }
+                if (publishedPresets.isNotEmpty() && searchQuery.isBlank() && (selectedCategory == EffectCategory.ALL || selectedCategory == EffectCategory.CINEMATIC)) {
+                  Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                    ) {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("👑 Owner Studio Presets", style = MaterialTheme.typography.labelMedium, color = GoldAccent, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(shape = RoundedCornerShape(4.dp), color = Color(0x33FFD54F)) {
+                          Text("PRO COMBO", fontSize = 8.sp, color = GoldAccent, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                        }
+                      }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                      modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                      horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                      publishedPresets.forEach { preset ->
+                        Surface(
+                          shape = RoundedCornerShape(8.dp),
+                          color = CharcoalCard,
+                          border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f)),
+                          modifier = Modifier
+                            .width(170.dp)
+                            .clickable { onApplyEffectPreset(preset) }
+                            .testTag("apply_preset_${preset.id}")
+                        ) {
+                          Column(modifier = Modifier.padding(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                              Text(preset.thumbnailIcon, fontSize = 16.sp)
+                              Spacer(modifier = Modifier.width(4.dp))
+                              Text(
+                                text = preset.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1
+                              )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                              text = "${preset.effects.size} Effects: " + preset.effects.joinToString("+") { it.effect.displayName.take(7) },
+                              fontSize = 8.sp,
+                              color = TextMuted,
+                              maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Surface(
+                              shape = RoundedCornerShape(4.dp),
+                              color = GoldAccent.copy(alpha = 0.2f),
+                              modifier = Modifier.fillMaxWidth()
+                            ) {
+                              Text(
+                                text = "Apply Combo ✨",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldAccent,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 3.dp)
+                              )
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
 
                 // 3. Effects Library Grid / Strip with Thumbnails
                 val filteredEffects = remember(searchQuery, selectedCategory) {
@@ -1481,6 +1554,10 @@ private fun getEffectIcon(effect: VideoEffect): ImageVector {
     EffectCategory.BLUR -> Icons.Default.BlurOn
     EffectCategory.CREATIVE -> Icons.Default.Palette
     EffectCategory.COLOR -> Icons.Default.ColorLens
+    EffectCategory.BODY -> Icons.Default.DirectionsRun
+    EffectCategory.SHAKE -> Icons.Default.Vibration
+    EffectCategory.PARTICLES -> Icons.Default.Grain
+    EffectCategory.DISTORTION -> Icons.Default.Waves
     EffectCategory.ALL -> Icons.Default.AutoAwesome
   }
 }

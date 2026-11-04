@@ -47,12 +47,36 @@ fun TemplatesScreen(
     "Birthday", "Love", "Travel", "Attitude", "Status", "Beat Sync"
   )
 
-  val filteredTemplates = remember(selectedCategory) {
+  val customTemplates by viewModel.customTemplates.collectAsState()
+
+  val allTemplates = remember(customTemplates) {
+    val converted = customTemplates.filter { it.isPublished }.map { ct ->
+      Template(
+        id = ct.id,
+        title = ct.title,
+        category = ct.category,
+        tagline = ct.tagline,
+        aspectRatio = ct.aspectRatio,
+        durationMs = ct.durationMs,
+        requiredClipsCount = ct.requiredClipsCount,
+        bgmName = ct.bgmName,
+        bpm = ct.bpm,
+        usesCount = ct.usesCount,
+        previewClips = SampleData.templates.first().previewClips,
+        previewTexts = SampleData.templates.first().previewTexts,
+        previewBgm = SampleData.templates.first().previewBgm,
+        gradientColors = Pair(ct.gradientStartHex, ct.gradientEndHex)
+      )
+    }
+    converted + SampleData.templates
+  }
+
+  val filteredTemplates = remember(selectedCategory, allTemplates) {
     if (selectedCategory == "All") {
-      SampleData.templates
+      allTemplates
     } else {
-      SampleData.templates.filter { it.category.equals(selectedCategory, ignoreCase = true) }
-        .ifEmpty { SampleData.templates }
+      allTemplates.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        .ifEmpty { allTemplates }
     }
   }
 
@@ -74,15 +98,16 @@ fun TemplatesScreen(
         Surface(
           shape = RoundedCornerShape(12.dp),
           color = CharcoalCard,
-          border = BorderStroke(1.dp, CharcoalBorder)
+          border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f)),
+          modifier = Modifier.clickable { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.OWNER_STUDIO) }
         ) {
           Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Icon(Icons.Default.TrendingUp, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Top Indian Hits", style = MaterialTheme.typography.labelSmall, color = EmeraldPrimary)
+            Text("Owner Studio 👑", style = MaterialTheme.typography.labelSmall, color = GoldAccent)
           }
         }
       }

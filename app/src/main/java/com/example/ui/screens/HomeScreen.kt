@@ -104,6 +104,9 @@ fun HomeScreen(
               "Professional Editor" -> {
                 showNewProjectDialog = true
               }
+              "Owner Studio" -> {
+                viewModel.navigateTo(AppScreen.OWNER_STUDIO)
+              }
               else -> {
                 viewModel.navigateTo(AppScreen.AI_LAB)
               }
@@ -384,6 +387,7 @@ private fun QuickToolsSection(onToolClick: (String) -> Unit) {
     Pair("Remove BG", Icons.Default.Face),
     Pair("Auto Captions", Icons.Default.Subtitles),
     Pair("Adjust Speed", Icons.Default.Speed),
+    Pair("Owner Studio", Icons.Default.AdminPanelSettings),
     Pair("AI Voiceover", Icons.Default.RecordVoiceOver),
     Pair("Professional Editor", Icons.Default.MovieFilter),
     Pair("All Tools", Icons.Default.DashboardCustomize)

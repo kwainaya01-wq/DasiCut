@@ -42,7 +42,7 @@ fun DesiCutApp(
     contentWindowInsets = WindowInsets(0, 0, 0, 0),
     bottomBar = {
       // Show bottom navigation bar only on root screens (Home, Templates, AI Lab, Profile)
-      if (currentScreen != AppScreen.EDITOR) {
+      if (currentScreen != AppScreen.EDITOR && currentScreen != AppScreen.OWNER_STUDIO) {
         NavigationBar(
           containerColor = CharcoalSurface,
           contentColor = TextPrimary,
@@ -165,6 +165,14 @@ fun DesiCutApp(
         }
         AppScreen.PROFILE -> {
           ProfileScreen(viewModel = viewModel)
+        }
+        AppScreen.OWNER_STUDIO -> {
+          OwnerStudioScreen(
+            viewModel = viewModel,
+            onNavigateBack = {
+              viewModel.navigateTo(AppScreen.PROFILE)
+            }
+          )
         }
       }
     }

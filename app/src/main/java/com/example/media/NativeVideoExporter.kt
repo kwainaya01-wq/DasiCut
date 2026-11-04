@@ -428,23 +428,43 @@ object NativeVideoExporter {
     val y = overlay.positionY * targetHeight
     val text = overlay.text
 
-    val scaledSize = overlay.fontSizeSp * (targetWidth / 400f)
+    val scaledSize = overlay.fontSizeSp * (targetWidth / 400f) * overlay.scale
     textPaint.textSize = scaledSize
     textPaint.color = try { android.graphics.Color.parseColor(overlay.colorHex) } catch (_: Exception) { android.graphics.Color.WHITE }
+    textPaint.textAlign = when (overlay.alignment.uppercase()) {
+      "LEFT" -> Paint.Align.LEFT
+      "RIGHT" -> Paint.Align.RIGHT
+      else -> Paint.Align.CENTER
+    }
+
+    if (overlay.hasShadow) {
+      val shadowCol = try { android.graphics.Color.parseColor(overlay.shadowColorHex) } catch (_: Exception) { android.graphics.Color.BLACK }
+      textPaint.setShadowLayer(10f, 4f, 4f, shadowCol)
+    } else {
+      textPaint.clearShadowLayer()
+    }
+
+    canvas.save()
+    canvas.rotate(overlay.rotationDegrees, x, y)
+
+    val textBounds = Rect()
+    textPaint.getTextBounds(text, 0, text.length, textBounds)
 
     // Background pill if present
     if (!overlay.bgColorHex.isNullOrBlank()) {
-      val textBounds = Rect()
-      textPaint.getTextBounds(text, 0, text.length, textBounds)
       val padX = scaledSize * 0.4f
       val padY = scaledSize * 0.25f
 
-      val pillRect = RectF(
-        x - textBounds.width() / 2f - padX,
-        y - textBounds.height() - padY,
-        x + textBounds.width() / 2f + padX,
-        y + padY
-      )
+      val pillLeft = when (textPaint.textAlign) {
+        Paint.Align.LEFT -> x - padX
+        Paint.Align.RIGHT -> x - textBounds.width() - padX
+        else -> x - textBounds.width() / 2f - padX
+      }
+      val pillRight = pillLeft + textBounds.width() + padX * 2f
+      val pillTop = y - textBounds.height() - padY
+      val pillBottom = y + padY
+
+      val pillRect = RectF(pillLeft, pillTop, pillRight, pillBottom)
       bgPillPaint.color = try { android.graphics.Color.parseColor(overlay.bgColorHex) } catch (_: Exception) { android.graphics.Color.DKGRAY }
       canvas.drawRoundRect(pillRect, 12f, 12f, bgPillPaint)
     }
@@ -452,13 +472,15 @@ object NativeVideoExporter {
     // Stroke outline
     if (overlay.hasStroke) {
       strokePaint.textSize = scaledSize
+      strokePaint.textAlign = textPaint.textAlign
       strokePaint.color = try { android.graphics.Color.parseColor(overlay.strokeColorHex) } catch (_: Exception) { android.graphics.Color.BLACK }
-      strokePaint.strokeWidth = scaledSize * 0.1f
+      strokePaint.strokeWidth = scaledSize * 0.12f
       canvas.drawText(text, x, y, strokePaint)
     }
 
     // Fill text
     canvas.drawText(text, x, y, textPaint)
+    canvas.restore()
   }
 
   private fun drawStickerToCanvas(
@@ -472,6 +494,17 @@ object NativeVideoExporter {
     val y = sticker.positionY * targetHeight
     paint.textSize = 52f * sticker.scale * (targetWidth / 400f)
     paint.color = android.graphics.Color.WHITE
+    paint.textAlign = Paint.Align.CENTER
+
+    if (sticker.hasShadow) {
+      paint.setShadowLayer(12f, 4f, 4f, android.graphics.Color.BLACK)
+    } else {
+      paint.clearShadowLayer()
+    }
+
+    canvas.save()
+    canvas.rotate(sticker.rotationDegrees, x, y)
     canvas.drawText(sticker.emojiOrSymbol, x, y, paint)
+    canvas.restore()
   }
 }
