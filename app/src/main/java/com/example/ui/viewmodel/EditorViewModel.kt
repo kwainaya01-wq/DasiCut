@@ -8,6 +8,7 @@ import com.example.data.ProjectRepository
 import com.example.data.SampleData
 import com.example.media.MediaFileManager
 import com.example.media.NativeVideoExporter
+import com.example.media.NativeVideoPlayerManager
 import com.example.model.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -47,6 +48,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
   val repository = ProjectRepository(application)
   val projects: StateFlow<List<Project>> = repository.projects
+  val playerManager = NativeVideoPlayerManager(application)
 
   private val _currentScreen = MutableStateFlow(AppScreen.HOME)
   val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
@@ -229,7 +231,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
   fun setPlayheadMs(timeMs: Long) {
     val maxDuration = _currentProject.value?.totalDurationMs ?: 1000L
-    _playheadMs.value = timeMs.coerceIn(0L, maxDuration)
+    val targetTime = timeMs.coerceIn(0L, maxDuration)
+    _playheadMs.value = targetTime
+
+    if (!_isPlaying.value) {
+      val proj = _currentProject.value ?: return
+      var clipStartMs = 0L
+      var activeClip: VideoClip? = null
+      var clipProgressMs = 0L
+
+      for (c in proj.clips) {
+        val duration = c.effectiveDurationMs
+        if (targetTime in clipStartMs until (clipStartMs + duration)) {
+          activeClip = c
+          clipProgressMs = targetTime - clipStartMs
+          break
+        }
+        clipStartMs += duration
+      }
+      val activeBgm = proj.audioTracks.find {
+        targetTime in it.startAtMs until (it.startAtMs + it.durationMs)
+      }
+      playerManager.syncWithTimeline(activeClip, clipProgressMs, false, activeBgm)
+    }
   }
 
   fun togglePlayback() {
@@ -265,6 +289,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
   fun pausePlayback() {
     _isPlaying.value = false
     playbackJob?.cancel()
+    playerManager.pauseVideo()
+  }
+
+  fun toggleClipMute(clipId: String) {
+    val proj = _currentProject.value ?: return
+    val clip = proj.clips.find { it.id == clipId } ?: return
+    val newMuted = !clip.isMuted
+    updateClipVolume(clipId, clip.volume, newMuted)
   }
 
   fun selectClip(clipId: String?) {
@@ -422,6 +454,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
       if (it.id == clipId) it.copy(speed = speed) else it
     }
     commitProject(proj.copy(clips = updatedClips))
+    val currentClip = updatedClips.find { it.id == clipId }
+    if (currentClip != null) {
+      playerManager.setClipAudioAndSpeed(currentClip.volume, currentClip.isMuted, speed)
+    }
   }
 
   fun updateClipVolume(clipId: String, volume: Float, isMuted: Boolean) {
@@ -431,6 +467,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
       if (it.id == clipId) it.copy(volume = volume, isMuted = isMuted) else it
     }
     commitProject(proj.copy(clips = updatedClips))
+    val currentClip = updatedClips.find { it.id == clipId }
+    if (currentClip != null) {
+      playerManager.setClipAudioAndSpeed(volume, isMuted, currentClip.speed)
+    }
   }
 
   fun updateClipFilter(clipId: String, filter: VideoFilter, intensity: Float) {
@@ -813,5 +853,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     _exportProgress.value = 0f
     _exportStage.value = ""
     _exportedFilePath.value = null
+  }
+
+  override fun onCleared() {
+    super.onCleared()
+    playerManager.release()
   }
 }

@@ -29,8 +29,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.unit.IntSize
+import android.view.TextureView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.media.ColorFilterMatrixHelper
 import com.example.media.MediaFileManager
+import com.example.media.NativeVideoPlayerManager
 import com.example.model.*
 import com.example.ui.theme.*
 import kotlin.random.Random
@@ -48,8 +52,13 @@ fun VideoPreviewCanvas(
   onChangeQualityClick: () -> Unit,
   onUpdateTextPosition: (String, Float, Float) -> Unit = { _, _, _ -> },
   onSelectText: (String) -> Unit = {},
+  playerManager: NativeVideoPlayerManager? = null,
+  onToggleMute: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
+  val activePlayerManager = playerManager ?: remember { NativeVideoPlayerManager(context.applicationContext) }
+
   var isFullscreen by remember { mutableStateOf(false) }
 
   // Find currently active clip and offset within clip
@@ -70,6 +79,21 @@ fun VideoPreviewCanvas(
   if (activeClip == null && project.clips.isNotEmpty()) {
     activeClip = project.clips.last()
     clipProgressMs = activeClip.effectiveDurationMs
+  }
+
+  // Active background music / audio track at current playhead
+  val activeBgmTrack = project.audioTracks.find {
+    playheadMs in it.startAtMs until (it.startAtMs + it.durationMs)
+  }
+
+  // Synchronize native player on state changes
+  LaunchedEffect(activeClip?.id, clipProgressMs, isPlaying, activeClip?.volume, activeClip?.isMuted, activeClip?.speed) {
+    activePlayerManager.syncWithTimeline(
+      clip = activeClip,
+      clipOffsetMs = clipProgressMs,
+      isPlaying = isPlaying,
+      activeAudioTrack = activeBgmTrack
+    )
   }
 
   // Active text overlays at current playhead
@@ -184,12 +208,32 @@ fun VideoPreviewCanvas(
           .border(1.dp, CharcoalBorder, RoundedCornerShape(6.dp))
           .background(Color.Black)
       ) {
-        // Main Video Frame Canvas with filters & effects
+        val hasRealVideo = activeClip?.localUri != null
+
+        // 1. Hardware-accelerated native video surface for imported media
+        if (hasRealVideo) {
+          AndroidView(
+            factory = { ctx ->
+              TextureView(ctx).apply {
+                activePlayerManager.attachTextureView(this)
+              }
+            },
+            update = { view ->
+              activePlayerManager.attachTextureView(view)
+            },
+            modifier = Modifier
+              .fillMaxSize()
+              .testTag("native_video_surface")
+          )
+        }
+
+        // 2. Main Canvas for scenic demo frame + real-time filters & effects
         Canvas(modifier = Modifier.fillMaxSize()) {
-          drawVideoFrame(
+          drawVideoOverlaysAndDemoFrame(
             clip = activeClip,
             clipProgressMs = clipProgressMs,
-            animPhase = animPhase
+            animPhase = animPhase,
+            isRealMediaActive = hasRealVideo
           )
         }
 
@@ -347,37 +391,41 @@ fun VideoPreviewCanvas(
       ) {
         Icon(Icons.Default.SkipNext, contentDescription = "Step Forward", tint = TextSecondary)
       }
+
+      Spacer(modifier = Modifier.width(12.dp))
+
+      // Mute / Unmute quick toggle button
+      val isClipMuted = activeClip?.isMuted == true
+      IconButton(
+        onClick = onToggleMute,
+        modifier = Modifier
+          .size(36.dp)
+          .testTag("preview_mute_toggle")
+      ) {
+        Icon(
+          imageVector = if (isClipMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+          contentDescription = if (isClipMuted) "Unmute Audio" else "Mute Audio",
+          tint = if (isClipMuted) ErrorRed else EmeraldPrimary
+        )
+      }
     }
   }
 }
 
-// Canvas rendering helper for video frame with real imported media, filters and effects
-private fun DrawScope.drawVideoFrame(
+// Canvas rendering helper for real-time video filter overlays, visual effects, and demo frame gradients
+private fun DrawScope.drawVideoOverlaysAndDemoFrame(
   clip: VideoClip?,
   clipProgressMs: Long,
-  animPhase: Float
+  animPhase: Float,
+  isRealMediaActive: Boolean
 ) {
   if (clip == null) {
     drawRect(Color.DarkGray)
     return
   }
 
-  // 1. Check if clip has real imported video file
-  var hasDrawnRealMedia = false
-  if (clip.localUri != null) {
-    val sourceTimeMs = clip.trimStartMs + (clipProgressMs * clip.speed).toLong()
-    val frameBmp = MediaFileManager.getFrameAtTime(clip.localUri, sourceTimeMs)
-    if (frameBmp != null) {
-      drawImage(
-        image = frameBmp.asImageBitmap(),
-        dstSize = IntSize(size.width.toInt(), size.height.toInt())
-      )
-      hasDrawnRealMedia = true
-    }
-  }
-
-  // 2. Fallback to rich scenic canvas simulation for demo/color clips
-  if (!hasDrawnRealMedia) {
+  // 1. Draw rich scenic canvas background only when no real media is playing
+  if (!isRealMediaActive) {
     val startColor = try {
       Color(android.graphics.Color.parseColor(clip.colorStartHex))
     } catch (_: Exception) {

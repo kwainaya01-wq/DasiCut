@@ -184,15 +184,23 @@ fun ToolSheet(
                 var vol by remember(selectedClip.id) { mutableFloatStateOf(selectedClip.volume) }
                 var muted by remember(selectedClip.id) { mutableStateOf(selectedClip.isMuted) }
 
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                   Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                   ) {
-                    Text("Volume: ${(vol * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = TextPrimary)
+                    Column {
+                      Text("Original Video Audio", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+                      Text(
+                        text = if (muted) "Audio muted" else if (vol > 1.0f) "Boosted ${(vol * 100).toInt()}% (+${((vol - 1.0f) * 6).toInt()} dB)" else "Level: ${(vol * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (muted) ErrorRed else if (vol > 1.0f) EmeraldPrimary else TextSecondary
+                      )
+                    }
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                      Text("Mute", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                      Text("Mute", style = MaterialTheme.typography.labelSmall, color = if (muted) ErrorRed else TextSecondary)
                       Spacer(modifier = Modifier.width(6.dp))
                       Switch(
                         checked = muted,
@@ -200,19 +208,62 @@ fun ToolSheet(
                           muted = it
                           onVolumeChanged(vol, muted)
                         },
-                        colors = SwitchDefaults.colors(checkedThumbColor = EmeraldPrimary)
+                        colors = SwitchDefaults.colors(checkedThumbColor = ErrorRed, checkedTrackColor = ErrorRed.copy(alpha = 0.4f)),
+                        modifier = Modifier.testTag("clip_mute_switch")
                       )
                     }
                   }
+
+                  // 0% to 200% Volume Slider
                   Slider(
                     value = vol,
                     onValueChange = {
                       vol = it
+                      if (muted && vol > 0.05f) {
+                        muted = false
+                      }
                       onVolumeChanged(vol, muted)
                     },
                     valueRange = 0f..2f,
-                    colors = SliderDefaults.colors(thumbColor = EmeraldPrimary, activeTrackColor = EmeraldPrimary)
+                    colors = SliderDefaults.colors(
+                      thumbColor = if (vol > 1.0f) EmeraldPrimary else GoldAccent,
+                      activeTrackColor = if (vol > 1.0f) EmeraldPrimary else GoldAccent
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("clip_volume_slider")
                   )
+
+                  // Volume Quick Presets Row
+                  Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    val presets = listOf(
+                      Triple("Mute (0%)", 0.0f, true),
+                      Triple("50%", 0.5f, false),
+                      Triple("100% (1x)", 1.0f, false),
+                      Triple("150% (1.5x)", 1.5f, false),
+                      Triple("200% (2x Boost)", 2.0f, false)
+                    )
+
+                    presets.forEach { (label, value, shouldMute) ->
+                      val isSelected = (!muted && kotlin.math.abs(vol - value) < 0.05f) || (muted && shouldMute)
+                      FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                          vol = value
+                          muted = shouldMute
+                          onVolumeChanged(vol, muted)
+                        },
+                        label = { Text(label, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                          selectedContainerColor = if (value > 1.0f) EmeraldPrimary else GoldAccent,
+                          selectedLabelColor = CharcoalBackground
+                        ),
+                        modifier = Modifier.testTag("preset_volume_${(value * 100).toInt()}")
+                      )
+                    }
+                  }
                 }
               }
             }

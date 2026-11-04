@@ -120,7 +120,7 @@ fun EditorScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Live Video Preview Canvas with real shader filters & effects
+      // 1. Live Video Preview Canvas with real hardware video & audio, filters & effects
       VideoPreviewCanvas(
         project = currentProj,
         playheadMs = playheadMs,
@@ -139,6 +139,10 @@ fun EditorScreen(
         },
         onSelectText = { textId ->
           viewModel.selectText(textId)
+        },
+        playerManager = viewModel.playerManager,
+        onToggleMute = {
+          selectedClipId?.let { viewModel.toggleClipMute(it) }
         },
         modifier = Modifier.weight(1f)
       )
