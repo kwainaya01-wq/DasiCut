@@ -162,6 +162,16 @@ class ProjectRepository(private val context: Context) {
       }
       cObj.put("effects", fxArr)
 
+      val retObj = JSONObject()
+      retObj.put("isEnabled", c.retouch.isEnabled)
+      retObj.put("overallIntensity", c.retouch.overallIntensity.toDouble())
+      retObj.put("skinSmoothing", c.retouch.skinSmoothing.toDouble())
+      retObj.put("faceBrightness", c.retouch.faceBrightness.toDouble())
+      retObj.put("blemishReduction", c.retouch.blemishReduction.toDouble())
+      retObj.put("eyeEnhancement", c.retouch.eyeEnhancement.toDouble())
+      retObj.put("naturalSkinTone", c.retouch.naturalSkinTone.toDouble())
+      cObj.put("retouch", retObj)
+
       cObj.put("fadeInMs", c.fadeInMs)
       cObj.put("fadeOutMs", c.fadeOutMs)
       cObj.put("isFrozen", c.isFrozen)
@@ -283,6 +293,22 @@ class ProjectRepository(private val context: Context) {
                 }
               }
               fxList
+            },
+            retouch = run {
+              val rObj = cObj.optJSONObject("retouch")
+              if (rObj != null) {
+                com.example.model.FaceRetouchSettings(
+                  isEnabled = rObj.optBoolean("isEnabled", false),
+                  overallIntensity = rObj.optDouble("overallIntensity", 0.70).toFloat(),
+                  skinSmoothing = rObj.optDouble("skinSmoothing", 0.65).toFloat(),
+                  faceBrightness = rObj.optDouble("faceBrightness", 0.50).toFloat(),
+                  blemishReduction = rObj.optDouble("blemishReduction", 0.55).toFloat(),
+                  eyeEnhancement = rObj.optDouble("eyeEnhancement", 0.50).toFloat(),
+                  naturalSkinTone = rObj.optDouble("naturalSkinTone", 0.60).toFloat()
+                )
+              } else {
+                com.example.model.FaceRetouchSettings()
+              }
             },
             fadeInMs = cObj.optLong("fadeInMs", 0L),
             fadeOutMs = cObj.optLong("fadeOutMs", 0L),

@@ -194,6 +194,16 @@ enum class TextAnimation(val displayName: String) {
   KARAOKE("Karaoke Glow")
 }
 
+data class FaceRetouchSettings(
+  val isEnabled: Boolean = false,
+  val overallIntensity: Float = 0.70f,   // 0f..1f (0-100%)
+  val skinSmoothing: Float = 0.65f,      // 0f..1f
+  val faceBrightness: Float = 0.50f,     // 0f..1f
+  val blemishReduction: Float = 0.55f,   // 0f..1f
+  val eyeEnhancement: Float = 0.50f,     // 0f..1f
+  val naturalSkinTone: Float = 0.60f     // 0f..1f
+)
+
 data class VideoClip(
   val id: String,
   val title: String,
@@ -217,6 +227,7 @@ data class VideoClip(
   val effect: VideoEffect = VideoEffect.NONE,
   val effectIntensity: Float = 0.8f,
   val effects: List<AppliedEffect> = emptyList(),
+  val retouch: FaceRetouchSettings = FaceRetouchSettings(),
   val fadeInMs: Long = 0L,
   val fadeOutMs: Long = 0L,
   val isFrozen: Boolean = false,

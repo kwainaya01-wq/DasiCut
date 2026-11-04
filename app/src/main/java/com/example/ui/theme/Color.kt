@@ -13,6 +13,7 @@ val GoldAccent = Color(0xFFFFD54F)
 val SaffronAccent = Color(0xFFFF6D00)
 val CyanAccent = Color(0xFF00E5FF)
 val NeonPink = Color(0xFFFF2A85)
+val CoralPink = Color(0xFFFF6E88)
 
 // Premium Dark Charcoal Surfaces
 val CharcoalBackground = Color(0xFF090C10)

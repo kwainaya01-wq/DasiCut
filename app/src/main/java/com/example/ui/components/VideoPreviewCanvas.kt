@@ -54,6 +54,7 @@ fun VideoPreviewCanvas(
   onSelectText: (String) -> Unit = {},
   playerManager: NativeVideoPlayerManager? = null,
   onToggleMute: () -> Unit = {},
+  isRetouchBypass: Boolean = false,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -238,7 +239,7 @@ fun VideoPreviewCanvas(
           } else 0f
         } else 0f
 
-        // 2. Main Canvas for scenic demo frame + real-time filters & 50+ effects & 20 transitions
+        // 2. Main Canvas for scenic demo frame + real-time filters & 50+ effects & 20 transitions & Face Retouch
         Canvas(modifier = Modifier.fillMaxSize()) {
           drawVideoOverlaysAndDemoFrame(
             clip = activeClip,
@@ -246,7 +247,8 @@ fun VideoPreviewCanvas(
             animPhase = animPhase,
             isRealMediaActive = hasRealVideo,
             nextClip = nextClip,
-            transitionProgress = transitionProgress
+            transitionProgress = transitionProgress,
+            isRetouchBypass = isRetouchBypass
           )
         }
 
@@ -308,8 +310,8 @@ fun VideoPreviewCanvas(
           }
         }
 
-        // Filter / Effect / Transition active badge in corner
-        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.activeEffects.isNotEmpty() || transitionProgress > 0f)) {
+        // Filter / Effect / Transition / Retouch active badge in corner
+        if (activeClip != null && (activeClip.filter != VideoFilter.ORIGINAL || activeClip.activeEffects.isNotEmpty() || transitionProgress > 0f || activeClip.retouch.isEnabled)) {
           Surface(
             shape = RoundedCornerShape(4.dp),
             color = Color(0xCC000000),
@@ -322,6 +324,14 @@ fun VideoPreviewCanvas(
               horizontalArrangement = Arrangement.spacedBy(4.dp),
               verticalAlignment = Alignment.CenterVertically
             ) {
+              if (isRetouchBypass) {
+                Text(
+                  text = "BEFORE (ORIGINAL)",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = CoralPink,
+                  fontWeight = FontWeight.Bold
+                )
+              }
               if (activeClip.filter != VideoFilter.ORIGINAL) {
                 Text(
                   text = activeClip.filter.displayName,
@@ -339,6 +349,14 @@ fun VideoPreviewCanvas(
                   text = fxSummary,
                   style = MaterialTheme.typography.labelSmall,
                   color = EmeraldPrimary
+                )
+              }
+              if (activeClip.retouch.isEnabled && !isRetouchBypass) {
+                Text(
+                  text = "✨ Retouch ${(activeClip.retouch.overallIntensity * 100).toInt()}%",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = CoralPink,
+                  fontWeight = FontWeight.Bold
                 )
               }
               if (transitionProgress > 0f && activeClip.transitionToNext != TransitionType.NONE) {
@@ -444,7 +462,8 @@ private fun DrawScope.drawVideoOverlaysAndDemoFrame(
   animPhase: Float,
   isRealMediaActive: Boolean,
   nextClip: VideoClip? = null,
-  transitionProgress: Float = 0f
+  transitionProgress: Float = 0f,
+  isRetouchBypass: Boolean = false
 ) {
   if (clip == null) {
     drawRect(Color.DarkGray)
@@ -577,6 +596,15 @@ private fun DrawScope.drawVideoOverlaysAndDemoFrame(
       transition = clip.transitionToNext,
       progress = transitionProgress,
       nextClip = nextClip,
+      animPhase = animPhase
+    )
+  }
+
+  // 5. Professional Face Retouch Layer
+  if (clip.retouch.isEnabled && !isRetouchBypass) {
+    com.example.media.FaceRetouchProcessor.renderRetouchCompose(
+      drawScope = this,
+      settings = clip.retouch,
       animPhase = animPhase
     )
   }

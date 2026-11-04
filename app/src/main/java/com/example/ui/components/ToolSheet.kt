@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -60,6 +61,10 @@ fun ToolSheet(
   onOpenStickerPicker: () -> Unit,
   onAutoCaptions: () -> Unit,
   onChangeRatio: (AspectRatio) -> Unit,
+  onRetouchChanged: (FaceRetouchSettings) -> Unit = {},
+  onRetouchReset: () -> Unit = {},
+  isRetouchBypass: Boolean = false,
+  onRetouchBypassChanged: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   Column(
@@ -318,6 +323,7 @@ fun ToolSheet(
             ToolTab.EFFECTS -> {
               var searchQuery by remember { mutableStateOf("") }
               var selectedCategory by remember { mutableStateOf(EffectCategory.ALL) }
+              var isGridView by remember { mutableStateOf(true) } // Toggle between Grid & Strip
               val activeEffects = selectedClip?.activeEffects ?: emptyList()
               var selectedActiveEffectId by remember(selectedClip?.id, activeEffects.size) {
                 mutableStateOf(activeEffects.firstOrNull()?.id)
@@ -342,7 +348,7 @@ fun ToolSheet(
                         verticalAlignment = Alignment.CenterVertically
                       ) {
                         Text(
-                          text = "Active Clip Effects (${activeEffects.size})",
+                          text = "Active Stack (${activeEffects.size})",
                           style = MaterialTheme.typography.labelMedium,
                           color = EmeraldPrimary,
                           fontWeight = FontWeight.Bold
@@ -384,7 +390,7 @@ fun ToolSheet(
                                 color = if (isFocused) EmeraldPrimary else TextPrimary,
                                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
                               )
-                              // Move Up
+                              // Move Left/Up
                               if (index > 0) {
                                 IconButton(
                                   onClick = { onReorderEffects(index, index - 1) },
@@ -393,7 +399,7 @@ fun ToolSheet(
                                   Icon(Icons.Default.ArrowBack, contentDescription = "Move Left", tint = TextMuted, modifier = Modifier.size(12.dp))
                                 }
                               }
-                              // Move Down
+                              // Move Right/Down
                               if (index < activeEffects.size - 1) {
                                 IconButton(
                                   onClick = { onReorderEffects(index, index + 1) },
@@ -444,7 +450,7 @@ fun ToolSheet(
                   }
                 }
 
-                // 2. Search & Category Filters
+                // 2. Search, Layout Toggle (Grid vs Horizontal Strip) & Category Filters
                 Row(
                   modifier = Modifier.fillMaxWidth(),
                   horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -471,6 +477,23 @@ fun ToolSheet(
                     ),
                     modifier = Modifier.weight(1f).height(46.dp).testTag("effects_search_field")
                   )
+
+                  // Layout Mode Toggle Button (Grid [⊞] vs Strip [↔])
+                  IconButton(
+                    onClick = { isGridView = !isGridView },
+                    modifier = Modifier
+                      .size(46.dp)
+                      .background(if (isGridView) EmeraldPrimary.copy(alpha = 0.2f) else CharcoalCard, RoundedCornerShape(8.dp))
+                      .border(BorderStroke(1.dp, if (isGridView) EmeraldPrimary else CharcoalBorder), RoundedCornerShape(8.dp))
+                      .testTag("effects_layout_toggle")
+                  ) {
+                    Icon(
+                      imageVector = if (isGridView) Icons.Default.GridView else Icons.Default.ViewStream,
+                      contentDescription = if (isGridView) "Switch to Strip" else "Switch to Grid",
+                      tint = if (isGridView) EmeraldPrimary else TextPrimary,
+                      modifier = Modifier.size(20.dp)
+                    )
+                  }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -496,7 +519,7 @@ fun ToolSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 3. Effects Library Grid / Row
+                // 3. Effects Library Grid / Strip with Thumbnails
                 val filteredEffects = remember(searchQuery, selectedCategory) {
                   VideoEffect.values().filter { eff ->
                     eff != VideoEffect.NONE &&
@@ -505,26 +528,71 @@ fun ToolSheet(
                   }
                 }
 
-                Text(
-                  text = "Library (${filteredEffects.size} Effects Available)",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = TextMuted,
-                  modifier = Modifier.padding(bottom = 4.dp)
-                )
-
                 Row(
-                  modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
                 ) {
-                  filteredEffects.forEach { effect ->
-                    val isApplied = activeEffects.any { it.effect == effect }
-                    Surface(
-                      shape = RoundedCornerShape(8.dp),
-                      color = if (isApplied) EmeraldDark.copy(alpha = 0.35f) else CharcoalCard,
-                      border = BorderStroke(1.dp, if (isApplied) EmeraldPrimary else CharcoalBorder),
-                      modifier = Modifier
-                        .width(135.dp)
-                        .clickable {
+                  Text(
+                    text = "Library (${filteredEffects.size} Effects • ${if (isGridView) "Grid View" else "Strip View"})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
+                  )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (isGridView) {
+                  // Responsive 3-column / 2-column Grid of Effects
+                  Column(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .heightIn(max = 240.dp)
+                      .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    filteredEffects.chunked(3).forEach { rowEffects ->
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                      ) {
+                        rowEffects.forEach { effect ->
+                          val isApplied = activeEffects.any { it.effect == effect }
+                          EffectGridThumbnailCard(
+                            effect = effect,
+                            isApplied = isApplied,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                              if (isApplied) {
+                                val existingId = activeEffects.find { it.effect == effect }?.id
+                                if (existingId != null) selectedActiveEffectId = existingId
+                              } else {
+                                onAddEffect(effect, 0.8f)
+                              }
+                            }
+                          )
+                        }
+                        // Spacer fillers for incomplete rows
+                        if (rowEffects.size < 3) {
+                          repeat(3 - rowEffects.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                          }
+                        }
+                      }
+                    }
+                  }
+                } else {
+                  // Horizontal Browsing Strip
+                  Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    filteredEffects.forEach { effect ->
+                      val isApplied = activeEffects.any { it.effect == effect }
+                      EffectStripThumbnailCard(
+                        effect = effect,
+                        isApplied = isApplied,
+                        onClick = {
                           if (isApplied) {
                             val existingId = activeEffects.find { it.effect == effect }?.id
                             if (existingId != null) selectedActiveEffectId = existingId
@@ -532,66 +600,258 @@ fun ToolSheet(
                             onAddEffect(effect, 0.8f)
                           }
                         }
-                        .testTag("effect_card_${effect.name}")
-                    ) {
-                      Column(modifier = Modifier.padding(8.dp)) {
-                        Row(
-                          modifier = Modifier.fillMaxWidth(),
-                          horizontalArrangement = Arrangement.SpaceBetween,
-                          verticalAlignment = Alignment.CenterVertically
-                        ) {
-                          Text(
-                            text = effect.displayName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isApplied) EmeraldPrimary else TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                          )
-                          if (effect.isPro) {
-                            Surface(
-                              shape = RoundedCornerShape(4.dp),
-                              color = GoldAccent.copy(alpha = 0.2f),
-                              border = BorderStroke(1.dp, GoldAccent)
-                            ) {
-                              Text(
-                                text = "PRO",
-                                color = GoldAccent,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
-                              )
-                            }
-                          }
-                        }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                          text = effect.description,
-                          style = MaterialTheme.typography.labelSmall,
-                          color = TextMuted,
-                          fontSize = 9.sp,
-                          maxLines = 2,
-                          lineHeight = 11.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                          Icon(
-                            imageVector = if (isApplied) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
-                            contentDescription = null,
-                            tint = if (isApplied) EmeraldPrimary else TextSecondary,
-                            modifier = Modifier.size(12.dp)
-                          )
-                          Spacer(modifier = Modifier.width(3.dp))
-                          Text(
-                            text = if (isApplied) "Applied" else "Add Effect",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isApplied) EmeraldPrimary else TextSecondary,
-                            fontSize = 9.sp
-                          )
-                        }
-                      }
+                      )
                     }
                   }
                 }
+              }
+            }
+
+            ToolTab.RETOUCH -> {
+              val currentRetouch = selectedClip?.retouch ?: FaceRetouchSettings()
+              var enabled by remember(selectedClip?.id, currentRetouch.isEnabled) { mutableStateOf(currentRetouch.isEnabled) }
+              var overallIntensity by remember(selectedClip?.id, currentRetouch.overallIntensity) { mutableFloatStateOf(currentRetouch.overallIntensity) }
+              var skinSmoothing by remember(selectedClip?.id, currentRetouch.skinSmoothing) { mutableFloatStateOf(currentRetouch.skinSmoothing) }
+              var faceBrightness by remember(selectedClip?.id, currentRetouch.faceBrightness) { mutableFloatStateOf(currentRetouch.faceBrightness) }
+              var blemishReduction by remember(selectedClip?.id, currentRetouch.blemishReduction) { mutableFloatStateOf(currentRetouch.blemishReduction) }
+              var eyeEnhancement by remember(selectedClip?.id, currentRetouch.eyeEnhancement) { mutableFloatStateOf(currentRetouch.eyeEnhancement) }
+              var naturalSkinTone by remember(selectedClip?.id, currentRetouch.naturalSkinTone) { mutableFloatStateOf(currentRetouch.naturalSkinTone) }
+
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                // Header: Master Enable Switch & Before/After Comparison
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Enable Retouch", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                      checked = enabled,
+                      onCheckedChange = {
+                        enabled = it
+                        onRetouchChanged(
+                          currentRetouch.copy(
+                            isEnabled = enabled,
+                            overallIntensity = overallIntensity,
+                            skinSmoothing = skinSmoothing,
+                            faceBrightness = faceBrightness,
+                            blemishReduction = blemishReduction,
+                            eyeEnhancement = eyeEnhancement,
+                            naturalSkinTone = naturalSkinTone
+                          )
+                        )
+                      },
+                      colors = SwitchDefaults.colors(checkedThumbColor = CoralPink, checkedTrackColor = CoralPink.copy(alpha = 0.4f)),
+                      modifier = Modifier.testTag("retouch_enable_switch")
+                    )
+                  }
+
+                  Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Before/After comparison button
+                    FilledTonalButton(
+                      onClick = { onRetouchBypassChanged(!isRetouchBypass) },
+                      colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (isRetouchBypass) CoralPink else CharcoalCard,
+                        contentColor = if (isRetouchBypass) CharcoalBackground else TextPrimary
+                      ),
+                      shape = RoundedCornerShape(8.dp),
+                      contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                      modifier = Modifier.testTag("retouch_before_after_button")
+                    ) {
+                      Icon(Icons.Default.Compare, contentDescription = null, modifier = Modifier.size(14.dp))
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Text(if (isRetouchBypass) "Showing Before" else "Hold Compare", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // Reset button
+                    TextButton(
+                      onClick = {
+                        enabled = false
+                        overallIntensity = 0.7f
+                        skinSmoothing = 0.65f
+                        faceBrightness = 0.4f
+                        blemishReduction = 0.6f
+                        eyeEnhancement = 0.5f
+                        naturalSkinTone = 0.5f
+                        onRetouchReset()
+                      },
+                      contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                      modifier = Modifier.testTag("retouch_reset_button")
+                    ) {
+                      Text("Reset", style = MaterialTheme.typography.labelSmall, color = ErrorRed)
+                    }
+                  }
+                }
+
+                // Overall Intensity Slider (0% - 100%)
+                Card(
+                  colors = CardDefaults.cardColors(containerColor = CharcoalCard),
+                  shape = RoundedCornerShape(8.dp),
+                  border = BorderStroke(1.dp, if (enabled) CoralPink.copy(alpha = 0.4f) else CharcoalBorder),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Column(modifier = Modifier.padding(10.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                      Text("Overall Retouch Intensity", style = MaterialTheme.typography.labelMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                      Text("${(overallIntensity * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = CoralPink, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                      value = overallIntensity,
+                      onValueChange = {
+                        overallIntensity = it
+                        if (!enabled) enabled = true
+                        onRetouchChanged(
+                          currentRetouch.copy(
+                            isEnabled = true,
+                            overallIntensity = overallIntensity,
+                            skinSmoothing = skinSmoothing,
+                            faceBrightness = faceBrightness,
+                            blemishReduction = blemishReduction,
+                            eyeEnhancement = eyeEnhancement,
+                            naturalSkinTone = naturalSkinTone
+                          )
+                        )
+                      },
+                      valueRange = 0f..1f,
+                      colors = SliderDefaults.colors(thumbColor = CoralPink, activeTrackColor = CoralPink),
+                      modifier = Modifier.testTag("retouch_overall_intensity_slider")
+                    )
+                  }
+                }
+
+                // Specific Retouch Parameter Sliders
+                RetouchSliderItem(
+                  label = "Skin Smoothing",
+                  description = "Bilateral edge-preserving pore and texture smoothing",
+                  value = skinSmoothing,
+                  color = CoralPink,
+                  testTag = "retouch_skin_smoothing_slider",
+                  onValueChange = {
+                    skinSmoothing = it
+                    if (!enabled) enabled = true
+                    onRetouchChanged(
+                      currentRetouch.copy(
+                        isEnabled = true,
+                        skinSmoothing = skinSmoothing
+                      )
+                    )
+                  }
+                )
+
+                RetouchSliderItem(
+                  label = "Face Brightness",
+                  description = "Targeted facial gamma lift and under-eye shadow reduction",
+                  value = faceBrightness,
+                  color = GoldAccent,
+                  testTag = "retouch_face_brightness_slider",
+                  onValueChange = {
+                    faceBrightness = it
+                    if (!enabled) enabled = true
+                    onRetouchChanged(
+                      currentRetouch.copy(
+                        isEnabled = true,
+                        faceBrightness = faceBrightness
+                      )
+                    )
+                  }
+                )
+
+                RetouchSliderItem(
+                  label = "Blemish Reduction",
+                  description = "Localized median blending for spot and redness softening",
+                  value = blemishReduction,
+                  color = EmeraldPrimary,
+                  testTag = "retouch_blemish_reduction_slider",
+                  onValueChange = {
+                    blemishReduction = it
+                    if (!enabled) enabled = true
+                    onRetouchChanged(
+                      currentRetouch.copy(
+                        isEnabled = true,
+                        blemishReduction = blemishReduction
+                      )
+                    )
+                  }
+                )
+
+                RetouchSliderItem(
+                  label = "Eye Enhancement",
+                  description = "Sclera whitening, iris clarity and catchlight boost",
+                  value = eyeEnhancement,
+                  color = Color(0xFF00E5FF),
+                  testTag = "retouch_eye_enhancement_slider",
+                  onValueChange = {
+                    eyeEnhancement = it
+                    if (!enabled) enabled = true
+                    onRetouchChanged(
+                      currentRetouch.copy(
+                        isEnabled = true,
+                        eyeEnhancement = eyeEnhancement
+                      )
+                    )
+                  }
+                )
+
+                RetouchSliderItem(
+                  label = "Natural Skin Tone",
+                  description = "Authentic warm undertone balancing and vitality",
+                  value = naturalSkinTone,
+                  color = Color(0xFFFF9100),
+                  testTag = "retouch_skin_tone_slider",
+                  onValueChange = {
+                    naturalSkinTone = it
+                    if (!enabled) enabled = true
+                    onRetouchChanged(
+                      currentRetouch.copy(
+                        isEnabled = true,
+                        naturalSkinTone = naturalSkinTone
+                      )
+                    )
+                  }
+                )
+              }
+            }
+
+            ToolTab.ADJUST -> {
+              var brightness by remember(selectedClip?.id) { mutableFloatStateOf(1f) }
+              var contrast by remember(selectedClip?.id) { mutableFloatStateOf(1f) }
+              var saturation by remember(selectedClip?.id) { mutableFloatStateOf(1f) }
+
+              Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                RetouchSliderItem(
+                  label = "Brightness",
+                  description = "Overall frame luminance level",
+                  value = (brightness / 2f).coerceIn(0f, 1f),
+                  color = GoldAccent,
+                  testTag = "adjust_brightness_slider",
+                  onValueChange = { brightness = it * 2f }
+                )
+                RetouchSliderItem(
+                  label = "Contrast",
+                  description = "Dynamic tonal range between darks and highlights",
+                  value = (contrast / 2f).coerceIn(0f, 1f),
+                  color = EmeraldPrimary,
+                  testTag = "adjust_contrast_slider",
+                  onValueChange = { contrast = it * 2f }
+                )
+                RetouchSliderItem(
+                  label = "Saturation",
+                  description = "Chroma and color vividness",
+                  value = (saturation / 2f).coerceIn(0f, 1f),
+                  color = Color(0xFF00E5FF),
+                  testTag = "adjust_saturation_slider",
+                  onValueChange = { saturation = it * 2f }
+                )
               }
             }
 
@@ -953,7 +1213,9 @@ fun ToolSheet(
       ToolIconItem(icon = Icons.Default.VolumeUp, label = "Volume", isSelected = activeTab == ToolTab.VOLUME) { onTabSelected(ToolTab.VOLUME) }
       ToolIconItem(icon = Icons.Default.FilterVintage, label = "Filters", isSelected = activeTab == ToolTab.FILTERS) { onTabSelected(ToolTab.FILTERS) }
       ToolIconItem(icon = Icons.Default.AutoAwesome, label = "Effects", isSelected = activeTab == ToolTab.EFFECTS) { onTabSelected(ToolTab.EFFECTS) }
+      ToolIconItem(icon = Icons.Default.Face, label = "Retouch", isSelected = activeTab == ToolTab.RETOUCH) { onTabSelected(ToolTab.RETOUCH) }
       ToolIconItem(icon = Icons.Default.Transform, label = "Transitions", isSelected = activeTab == ToolTab.TRANSITIONS) { onTabSelected(ToolTab.TRANSITIONS) }
+      ToolIconItem(icon = Icons.Default.Tune, label = "Adjust", isSelected = activeTab == ToolTab.ADJUST) { onTabSelected(ToolTab.ADJUST) }
       ToolIconItem(icon = Icons.Default.CropRotate, label = "Transform", isSelected = activeTab == ToolTab.TRANSFORM) { onTabSelected(ToolTab.TRANSFORM) }
       ToolIconItem(icon = Icons.Default.MusicNote, label = "Audio", isSelected = activeTab == ToolTab.AUDIO) { onTabSelected(ToolTab.AUDIO) }
       ToolIconItem(icon = Icons.Default.TextFields, label = "Text", isSelected = activeTab == ToolTab.TEXT) { onTabSelected(ToolTab.TEXT) }
@@ -1004,6 +1266,225 @@ private fun ToolIconItem(
   }
 }
 
+@Composable
+private fun EffectGridThumbnailCard(
+  effect: VideoEffect,
+  isApplied: Boolean,
+  modifier: Modifier = Modifier,
+  onClick: () -> Unit
+) {
+  Surface(
+    shape = RoundedCornerShape(8.dp),
+    color = if (isApplied) EmeraldDark.copy(alpha = 0.35f) else CharcoalCard,
+    border = BorderStroke(1.dp, if (isApplied) EmeraldPrimary else CharcoalBorder),
+    modifier = modifier
+      .clickable { onClick() }
+      .testTag("effect_card_${effect.name}")
+  ) {
+    Column(modifier = Modifier.padding(6.dp)) {
+      // Visual Effect Thumbnail
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(42.dp)
+          .background(CharcoalSurfaceVariant, RoundedCornerShape(4.dp)),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          imageVector = getEffectIcon(effect),
+          contentDescription = null,
+          tint = if (isApplied) EmeraldPrimary else GoldAccent,
+          modifier = Modifier.size(22.dp)
+        )
+        if (effect.isPro) {
+          Surface(
+            shape = RoundedCornerShape(bottomStart = 4.dp),
+            color = GoldAccent.copy(alpha = 0.85f),
+            modifier = Modifier.align(Alignment.TopEnd)
+          ) {
+            Text(
+              text = "PRO",
+              color = CharcoalBackground,
+              fontSize = 7.sp,
+              fontWeight = FontWeight.Bold,
+              modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+            )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(4.dp))
+
+      Text(
+        text = effect.displayName,
+        style = MaterialTheme.typography.labelSmall,
+        color = if (isApplied) EmeraldPrimary else TextPrimary,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        fontSize = 10.sp
+      )
+
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = if (isApplied) "Applied" else "+ Add",
+          style = MaterialTheme.typography.labelSmall,
+          color = if (isApplied) EmeraldPrimary else TextMuted,
+          fontSize = 8.sp,
+          fontWeight = if (isApplied) FontWeight.Bold else FontWeight.Normal
+        )
+        Icon(
+          imageVector = if (isApplied) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+          contentDescription = null,
+          tint = if (isApplied) EmeraldPrimary else TextMuted,
+          modifier = Modifier.size(10.dp)
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun EffectStripThumbnailCard(
+  effect: VideoEffect,
+  isApplied: Boolean,
+  onClick: () -> Unit
+) {
+  Surface(
+    shape = RoundedCornerShape(8.dp),
+    color = if (isApplied) EmeraldDark.copy(alpha = 0.35f) else CharcoalCard,
+    border = BorderStroke(1.dp, if (isApplied) EmeraldPrimary else CharcoalBorder),
+    modifier = Modifier
+      .width(130.dp)
+      .clickable { onClick() }
+      .testTag("effect_card_${effect.name}")
+  ) {
+    Column(modifier = Modifier.padding(8.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(
+          imageVector = getEffectIcon(effect),
+          contentDescription = null,
+          tint = if (isApplied) EmeraldPrimary else GoldAccent,
+          modifier = Modifier.size(16.dp)
+        )
+        if (effect.isPro) {
+          Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = GoldAccent.copy(alpha = 0.2f),
+            border = BorderStroke(1.dp, GoldAccent)
+          ) {
+            Text(
+              text = "PRO",
+              color = GoldAccent,
+              fontSize = 8.sp,
+              fontWeight = FontWeight.Bold,
+              modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+            )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(4.dp))
+
+      Text(
+        text = effect.displayName,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (isApplied) EmeraldPrimary else TextPrimary,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1
+      )
+      Spacer(modifier = Modifier.height(2.dp))
+      Text(
+        text = effect.description,
+        style = MaterialTheme.typography.labelSmall,
+        color = TextMuted,
+        fontSize = 9.sp,
+        maxLines = 2,
+        lineHeight = 11.sp
+      )
+      Spacer(modifier = Modifier.height(4.dp))
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          imageVector = if (isApplied) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+          contentDescription = null,
+          tint = if (isApplied) EmeraldPrimary else TextSecondary,
+          modifier = Modifier.size(12.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+          text = if (isApplied) "Applied" else "Add Effect",
+          style = MaterialTheme.typography.labelSmall,
+          color = if (isApplied) EmeraldPrimary else TextSecondary,
+          fontSize = 9.sp
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun RetouchSliderItem(
+  label: String,
+  description: String,
+  value: Float,
+  color: Color,
+  testTag: String,
+  onValueChange: (Float) -> Unit
+) {
+  Card(
+    colors = CardDefaults.cardColors(containerColor = CharcoalCard),
+    shape = RoundedCornerShape(8.dp),
+    border = BorderStroke(1.dp, CharcoalBorder),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    Column(modifier = Modifier.padding(8.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column {
+          Text(label, style = MaterialTheme.typography.labelMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+          Text(description, style = MaterialTheme.typography.labelSmall, color = TextMuted, fontSize = 9.sp)
+        }
+        Text(
+          text = "${(value * 100).toInt()}%",
+          style = MaterialTheme.typography.labelMedium,
+          color = color,
+          fontWeight = FontWeight.Bold
+        )
+      }
+      Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = 0f..1f,
+        colors = SliderDefaults.colors(thumbColor = color, activeTrackColor = color),
+        modifier = Modifier.testTag(testTag)
+      )
+    }
+  }
+}
+
+private fun getEffectIcon(effect: VideoEffect): ImageVector {
+  return when (effect.category) {
+    EffectCategory.CINEMATIC -> Icons.Default.MovieFilter
+    EffectCategory.GLITCH -> Icons.Default.BrokenImage
+    EffectCategory.LIGHT -> Icons.Default.WbIncandescent
+    EffectCategory.RETRO -> Icons.Default.CameraRoll
+    EffectCategory.BLUR -> Icons.Default.BlurOn
+    EffectCategory.CREATIVE -> Icons.Default.Palette
+    EffectCategory.COLOR -> Icons.Default.ColorLens
+    EffectCategory.ALL -> Icons.Default.AutoAwesome
+  }
+}
+
 private fun getTabTitle(tab: ToolTab): String {
   return when (tab) {
     ToolTab.SPLIT -> "Split Clip"
@@ -1011,8 +1492,10 @@ private fun getTabTitle(tab: ToolTab): String {
     ToolTab.SPEED -> "Speed Control"
     ToolTab.VOLUME -> "Volume & Fade"
     ToolTab.FILTERS -> "Color Grading Filters"
-    ToolTab.EFFECTS -> "Visual Effects"
+    ToolTab.EFFECTS -> "Visual Effects Library"
     ToolTab.TRANSITIONS -> "Clip Transition"
+    ToolTab.RETOUCH -> "Professional Face Retouch"
+    ToolTab.ADJUST -> "Color & Tone Adjust"
     ToolTab.TRANSFORM -> "Transform & Modify"
     ToolTab.AUDIO -> "Audio & Sound FX"
     ToolTab.TEXT -> "Text & Typography"
@@ -1026,3 +1509,4 @@ private fun getTabTitle(tab: ToolTab): String {
 private fun Float.formatOneDecimal(): String {
   return "%.1f".format(this)
 }
+

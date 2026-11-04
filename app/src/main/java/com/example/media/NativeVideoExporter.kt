@@ -325,8 +325,15 @@ object NativeVideoExporter {
     } else null
 
     if (realBitmap != null) {
-      // Scale and draw real imported video frame into target bounds
-      val srcRect = Rect(0, 0, realBitmap.width, realBitmap.height)
+      // Apply professional Face Retouch if enabled
+      val retouchedBitmap = if (clip.retouch.isEnabled) {
+        FaceRetouchProcessor.applyRetouch(realBitmap, clip.retouch)
+      } else {
+        realBitmap
+      }
+
+      // Scale and draw imported video frame into target bounds
+      val srcRect = Rect(0, 0, retouchedBitmap.width, retouchedBitmap.height)
       val destRect = Rect(0, 0, targetWidth, targetHeight)
 
       canvas.save()
@@ -336,7 +343,7 @@ object NativeVideoExporter {
       if (clip.isFlippedH) {
         canvas.scale(-1f, 1f, targetWidth / 2f, targetHeight / 2f)
       }
-      canvas.drawBitmap(realBitmap, srcRect, destRect, clipPaint)
+      canvas.drawBitmap(retouchedBitmap, srcRect, destRect, clipPaint)
       canvas.restore()
     } else {
       // Draw scenic background gradient
@@ -378,6 +385,11 @@ object NativeVideoExporter {
         close()
       }
       canvas.drawPath(path, hillPaint)
+
+      // Retouch canvas layer for scenic frame
+      if (clip.retouch.isEnabled) {
+        FaceRetouchProcessor.renderRetouchCanvas(canvas, clip.retouch, targetWidth, targetHeight)
+      }
     }
 
     // Apply 50+ Real Visual Effects across multi-effect stack

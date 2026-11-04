@@ -36,6 +36,8 @@ enum class ToolTab {
   FILTERS,
   EFFECTS,
   TRANSITIONS,
+  RETOUCH,
+  ADJUST,
   TRANSFORM,
   AUDIO,
   TEXT,
@@ -103,6 +105,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
   // Preview quality
   private val _previewQuality = MutableStateFlow("1080p Full")
   val previewQuality: StateFlow<String> = _previewQuality.asStateFlow()
+
+  // Face Retouch Before/After bypass comparison toggle
+  private val _isRetouchBypass = MutableStateFlow(false)
+  val isRetouchBypass: StateFlow<Boolean> = _isRetouchBypass.asStateFlow()
+
+  fun setRetouchBypass(bypass: Boolean) {
+    _isRetouchBypass.value = bypass
+  }
 
   private var playbackJob: Job? = null
 
@@ -590,6 +600,33 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
   fun removeClipTransition(clipId: String) {
     updateClipTransition(clipId, TransitionType.NONE)
+  }
+
+  fun updateClipRetouch(clipId: String, retouch: FaceRetouchSettings) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) it.copy(retouch = retouch) else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun toggleClipRetouch(clipId: String, enabled: Boolean) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) it.copy(retouch = it.retouch.copy(isEnabled = enabled)) else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
+  }
+
+  fun resetClipRetouch(clipId: String) {
+    val proj = _currentProject.value ?: return
+    saveUndoState(proj)
+    val updatedClips = proj.clips.map {
+      if (it.id == clipId) it.copy(retouch = FaceRetouchSettings(isEnabled = false)) else it
+    }
+    commitProject(proj.copy(clips = updatedClips))
   }
 
   fun rotateClip(clipId: String) {

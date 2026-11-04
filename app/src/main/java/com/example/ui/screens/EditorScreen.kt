@@ -115,149 +115,181 @@ fun EditorScreen(
     },
     modifier = modifier.fillMaxSize()
   ) { innerPadding ->
+    val isRetouchBypass by viewModel.isRetouchBypass.collectAsState()
+
     Column(
       modifier = Modifier
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Live Video Preview Canvas with real hardware video & audio, filters & effects
-      VideoPreviewCanvas(
-        project = currentProj,
-        playheadMs = playheadMs,
-        isPlaying = isPlaying,
-        previewQuality = previewQuality,
-        onTogglePlay = { viewModel.togglePlayback() },
-        onStepBackward = { viewModel.setPlayheadMs(playheadMs - 100L) },
-        onStepForward = { viewModel.setPlayheadMs(playheadMs + 100L) },
-        onChangeRatioClick = { viewModel.setToolTab(ToolTab.CANVAS) },
-        onChangeQualityClick = {
-          val nextQ = if (previewQuality == "1080p Full") "720p Fast" else "1080p Full"
-          viewModel.setPreviewQuality(nextQ)
-        },
-        onUpdateTextPosition = { textId, x, y ->
-          viewModel.updateTextPosition(textId, x, y)
-        },
-        onSelectText = { textId ->
-          viewModel.selectText(textId)
-        },
-        playerManager = viewModel.playerManager,
-        onToggleMute = {
-          selectedClipId?.let { viewModel.toggleClipMute(it) }
-        },
-        modifier = Modifier.weight(1f)
-      )
+      // 1. Live Video Preview Canvas - FIXED, CONSISTENT SIZE & POSITION (Never shrinks when tools open)
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .wrapContentHeight()
+      ) {
+        VideoPreviewCanvas(
+          project = currentProj,
+          playheadMs = playheadMs,
+          isPlaying = isPlaying,
+          previewQuality = previewQuality,
+          onTogglePlay = { viewModel.togglePlayback() },
+          onStepBackward = { viewModel.setPlayheadMs(playheadMs - 100L) },
+          onStepForward = { viewModel.setPlayheadMs(playheadMs + 100L) },
+          onChangeRatioClick = { viewModel.setToolTab(ToolTab.CANVAS) },
+          onChangeQualityClick = {
+            val nextQ = if (previewQuality == "1080p Full") "720p Fast" else "1080p Full"
+            viewModel.setPreviewQuality(nextQ)
+          },
+          onUpdateTextPosition = { textId, x, y ->
+            viewModel.updateTextPosition(textId, x, y)
+          },
+          onSelectText = { textId ->
+            viewModel.selectText(textId)
+          },
+          playerManager = viewModel.playerManager,
+          onToggleMute = {
+            selectedClipId?.let { viewModel.toggleClipMute(it) }
+          },
+          isRetouchBypass = isRetouchBypass,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
 
-      // 2. Interactive Multi-Track Timeline (Ruler, Clips, Audio, Text, Playhead)
-      TimelineView(
-        project = currentProj,
-        playheadMs = playheadMs,
-        selectedClipId = selectedClipId,
-        selectedAudioId = selectedAudioId,
-        selectedTextId = selectedTextId,
-        zoom = timelineZoom,
-        onPlayheadChanged = { viewModel.setPlayheadMs(it) },
-        onSelectClip = { viewModel.selectClip(it) },
-        onSelectAudio = { viewModel.selectAudio(it) },
-        onSelectText = { viewModel.selectText(it) },
-        onOpenTransitions = {
-          viewModel.selectClip(it)
-          viewModel.setToolTab(ToolTab.TRANSITIONS)
-        },
-        onAddClipClick = {
-          mediaPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-        },
-        onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
-        onZoomIn = { viewModel.setTimelineZoom(timelineZoom + 0.3f) },
-        onZoomOut = { viewModel.setTimelineZoom(timelineZoom - 0.3f) },
-        onReorderClips = { from, to -> viewModel.reorderClips(from, to) },
-        onTrimClip = { clipId, startMs, endMs -> viewModel.trimClip(clipId, startMs, endMs) },
-        onReplaceClipClick = { clipId ->
-          viewModel.selectClip(clipId)
-          replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-        },
-        onAudioMove = { audioId, newStartMs ->
-          viewModel.updateAudioStartTime(audioId, newStartMs)
+      // 2. Bottom Workspace (Timeline + Tool Sheet docked below fixed preview)
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .weight(1f)
+      ) {
+        // Timeline View takes flexible space in the editing area
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+        ) {
+          TimelineView(
+            project = currentProj,
+            playheadMs = playheadMs,
+            selectedClipId = selectedClipId,
+            selectedAudioId = selectedAudioId,
+            selectedTextId = selectedTextId,
+            zoom = timelineZoom,
+            onPlayheadChanged = { viewModel.setPlayheadMs(it) },
+            onSelectClip = { viewModel.selectClip(it) },
+            onSelectAudio = { viewModel.selectAudio(it) },
+            onSelectText = { viewModel.selectText(it) },
+            onOpenTransitions = {
+              viewModel.selectClip(it)
+              viewModel.setToolTab(ToolTab.TRANSITIONS)
+            },
+            onAddClipClick = {
+              mediaPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            },
+            onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
+            onZoomIn = { viewModel.setTimelineZoom(timelineZoom + 0.3f) },
+            onZoomOut = { viewModel.setTimelineZoom(timelineZoom - 0.3f) },
+            onReorderClips = { from, to -> viewModel.reorderClips(from, to) },
+            onTrimClip = { clipId, startMs, endMs -> viewModel.trimClip(clipId, startMs, endMs) },
+            onReplaceClipClick = { clipId ->
+              viewModel.selectClip(clipId)
+              replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            },
+            onAudioMove = { audioId, newStartMs ->
+              viewModel.updateAudioStartTime(audioId, newStartMs)
+            }
+          )
         }
-      )
 
-      // 3. Bottom Tool Sheet & Editing Action Bar
-      ToolSheet(
-        activeTab = activeToolTab,
-        selectedClip = selectedClip,
-        audioTracks = currentProj.audioTracks,
-        selectedAudioId = selectedAudioId,
-        onTabSelected = { viewModel.setToolTab(it) },
-        onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
-        onTrimChanged = { startMs, endMs ->
-          selectedClipId?.let { viewModel.trimClip(it, startMs, endMs) }
-        },
-        onSpeedChanged = { speed ->
-          selectedClipId?.let { viewModel.updateClipSpeed(it, speed) }
-        },
-        onVolumeChanged = { vol, isMuted ->
-          selectedClipId?.let { viewModel.updateClipVolume(it, vol, isMuted) }
-        },
-        onFilterChanged = { filter, intensity ->
-          selectedClipId?.let { viewModel.updateClipFilter(it, filter, intensity) }
-        },
-        onEffectChanged = { effect, intensity ->
-          selectedClipId?.let { viewModel.updateClipEffect(it, effect, intensity) }
-        },
-        onTransitionChanged = { trans ->
-          selectedClipId?.let { viewModel.updateClipTransition(it, trans) }
-        },
-        onTransitionDurationChanged = { durMs ->
-          selectedClipId?.let { viewModel.updateTransitionDuration(it, durMs) }
-        },
-        onAddEffect = { effect, intensity ->
-          selectedClipId?.let { viewModel.addEffectToClip(it, effect, intensity) }
-        },
-        onRemoveEffect = { effectId ->
-          selectedClipId?.let { viewModel.removeEffectFromClip(it, effectId) }
-        },
-        onReorderEffects = { from, to ->
-          selectedClipId?.let { viewModel.reorderClipEffects(it, from, to) }
-        },
-        onUpdateEffectIntensity = { effectId, intensity ->
-          selectedClipId?.let { viewModel.updateEffectIntensity(it, effectId, intensity) }
-        },
-        onClearEffects = {
-          selectedClipId?.let { viewModel.clearClipEffects(it) }
-        },
-        onRotateClick = {
-          selectedClipId?.let { viewModel.rotateClip(it) }
-        },
-        onFlipHClick = {
-          selectedClipId?.let { viewModel.flipClipH(it) }
-        },
-        onDuplicateClick = {
-          viewModel.duplicateSelectedClip()
-        },
-        onDeleteClick = {
-          viewModel.deleteSelectedClip()
-        },
-        onReverseClick = {
-          selectedClipId?.let { viewModel.reverseClip(it) }
-        },
-        onFreezeFrameClick = {
-          selectedClipId?.let { viewModel.freezeFrame(it) }
-        },
-        onReplaceClipClick = {
-          replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-        },
-        onSelectAudio = { viewModel.selectAudio(it) },
-        onAudioVolumeChanged = { id, vol, muted ->
-          viewModel.updateAudioVolume(id, vol, muted)
-        },
-        onDeleteAudioClick = { id ->
-          viewModel.removeAudioTrack(id)
-        },
-        onOpenAudioPicker = { showAudioPicker = true },
-        onOpenTextEditor = { showTextEditor = true },
-        onOpenStickerPicker = { showStickerPicker = true },
-        onAutoCaptions = { viewModel.generateAutoCaptions() },
-        onChangeRatio = { viewModel.setAspectRatio(it) }
-      )
+        // 3. Bottom Tool Sheet & Editing Action Bar
+        ToolSheet(
+          activeTab = activeToolTab,
+          selectedClip = selectedClip,
+          audioTracks = currentProj.audioTracks,
+          selectedAudioId = selectedAudioId,
+          onTabSelected = { viewModel.setToolTab(it) },
+          onSplitClick = { viewModel.splitSelectedClipAtPlayhead() },
+          onTrimChanged = { startMs, endMs ->
+            selectedClipId?.let { viewModel.trimClip(it, startMs, endMs) }
+          },
+          onSpeedChanged = { speed ->
+            selectedClipId?.let { viewModel.updateClipSpeed(it, speed) }
+          },
+          onVolumeChanged = { vol, isMuted ->
+            selectedClipId?.let { viewModel.updateClipVolume(it, vol, isMuted) }
+          },
+          onFilterChanged = { filter, intensity ->
+            selectedClipId?.let { viewModel.updateClipFilter(it, filter, intensity) }
+          },
+          onEffectChanged = { effect, intensity ->
+            selectedClipId?.let { viewModel.updateClipEffect(it, effect, intensity) }
+          },
+          onTransitionChanged = { trans ->
+            selectedClipId?.let { viewModel.updateClipTransition(it, trans) }
+          },
+          onTransitionDurationChanged = { durMs ->
+            selectedClipId?.let { viewModel.updateTransitionDuration(it, durMs) }
+          },
+          onAddEffect = { effect, intensity ->
+            selectedClipId?.let { viewModel.addEffectToClip(it, effect, intensity) }
+          },
+          onRemoveEffect = { effectId ->
+            selectedClipId?.let { viewModel.removeEffectFromClip(it, effectId) }
+          },
+          onReorderEffects = { from, to ->
+            selectedClipId?.let { viewModel.reorderClipEffects(it, from, to) }
+          },
+          onUpdateEffectIntensity = { effectId, intensity ->
+            selectedClipId?.let { viewModel.updateEffectIntensity(it, effectId, intensity) }
+          },
+          onClearEffects = {
+            selectedClipId?.let { viewModel.clearClipEffects(it) }
+          },
+          onRotateClick = {
+            selectedClipId?.let { viewModel.rotateClip(it) }
+          },
+          onFlipHClick = {
+            selectedClipId?.let { viewModel.flipClipH(it) }
+          },
+          onDuplicateClick = {
+            viewModel.duplicateSelectedClip()
+          },
+          onDeleteClick = {
+            viewModel.deleteSelectedClip()
+          },
+          onReverseClick = {
+            selectedClipId?.let { viewModel.reverseClip(it) }
+          },
+          onFreezeFrameClick = {
+            selectedClipId?.let { viewModel.freezeFrame(it) }
+          },
+          onReplaceClipClick = {
+            replacePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+          },
+          onSelectAudio = { viewModel.selectAudio(it) },
+          onAudioVolumeChanged = { id, vol, muted ->
+            viewModel.updateAudioVolume(id, vol, muted)
+          },
+          onDeleteAudioClick = { id ->
+            viewModel.removeAudioTrack(id)
+          },
+          onOpenAudioPicker = { showAudioPicker = true },
+          onOpenTextEditor = { showTextEditor = true },
+          onOpenStickerPicker = { showStickerPicker = true },
+          onAutoCaptions = { viewModel.generateAutoCaptions() },
+          onChangeRatio = { viewModel.setAspectRatio(it) },
+          onRetouchChanged = { newRetouch ->
+            selectedClipId?.let { viewModel.updateClipRetouch(it, newRetouch) }
+          },
+          onRetouchReset = {
+            selectedClipId?.let { viewModel.resetClipRetouch(it) }
+          },
+          isRetouchBypass = isRetouchBypass,
+          onRetouchBypassChanged = { bypass ->
+            viewModel.setRetouchBypass(bypass)
+          }
+        )
+      }
     }
   }
 
